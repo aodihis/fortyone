@@ -1,4 +1,81 @@
 body {
 	font-family: sans-serif;
 	text-align: center;
+	margin: 0;
+}
+.game-container {
+	width: 100%;
+	height: 100vh;
+	//margin: 5vh auto;
+	background-color: #007B43;
+	//background-color: lightblue;
+	//border-radius: 16px;
+	padding: 0;
+}
+
+.deck {
+	position: absolute;
+	list-style: none;
+	top: 40%;
+	left: 47%;
+	transform: translate(-50%, -50%);
+	width: fit-content;
+	height: fit-content;
+}
+
+.card {
+	width: 75px;
+	height: 105px;
+	border-radius: 1px;
+	//border: 2px solid #333;
+	//box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.3);
+}
+
+.deck .card {
+	display: block;
+	position: absolute;
+	top: 0;
+	left: 0;
+	z-index: 3;
+	opacity: 1;
+}
+
+.card.card-back {
+	background-image: url('/images/rummy/back.png');
+	background-size: cover;
+	background-position: center;
+	background-repeat: no-repeat;
+}
+
+.player-area {
+	position: absolute;
+	width: fit-content;
+	height: fit-content;
+	display: flex;
+	justify-content: center;
+	align-items: center;
+	gap: 10px;
+}
+
+.left-enemy {
+	left: -5%;
+	top: 40%;
+	transform: rotate(90deg);
+}
+
+.right-enemy {
+	right: -5%;
+	top: 40%;
+	transform: rotate(-90deg);
+}
+
+.top-enemy {
+	left: 37%;
+	top: 5%;
+	transform: rotate(180deg);
+}
+
+.current-player {
+	left: 37%;
+	bottom: 5%;
 }
