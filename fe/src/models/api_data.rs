@@ -15,7 +15,13 @@ pub enum MessageType {
 #[derive(Debug, Deserialize, Clone, PartialEq)]
 pub struct ConnectResponse {
     pub game_id: String,
-    pub num_of_players: usize,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct JoinResponse {
+    #[allow(dead_code)]
+    pub player_id: String,
+    pub token: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

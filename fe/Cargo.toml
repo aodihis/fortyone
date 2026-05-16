@@ -10,5 +10,6 @@ gloo-timers = { version = "0.3.0", features = ["futures"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 rand = "0.8.5"
-gloo-net = { version = "0.6.0", features = ["websocket"] }
+gloo-net = { version = "0.6.0", features = ["websocket", "http"] }
 futures-util = "0.3.31"
+js-sys = "0.3"
