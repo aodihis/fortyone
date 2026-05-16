@@ -2,7 +2,7 @@ FROM rust:latest AS builder
 WORKDIR /app
 RUN apt-get update && apt-get install -y pkg-config libssl-dev && rm -rf /var/lib/apt/lists/*
 RUN rustup target add wasm32-unknown-unknown
-RUN cargo install trunk --version 0.21.5
+RUN cargo install trunk --locked
 
 COPY . .
 

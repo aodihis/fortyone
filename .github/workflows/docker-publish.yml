@@ -14,6 +14,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
@@ -22,44 +25,64 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build & push backend
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: ./be
           push: true
-          tags: ghcr.io/aodihis/fortyone-be:latest
+          tags: |
+            ghcr.io/aodihis/fortyone-be:latest
+            ghcr.io/aodihis/fortyone-be:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       - name: Build & push frontend
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: ./fe
           push: true
-          tags: ghcr.io/aodihis/fortyone-fe:latest
+          tags: |
+            ghcr.io/aodihis/fortyone-fe:latest
+            ghcr.io/aodihis/fortyone-fe:${{ github.sha }}
           build-args: |
             API_URL=${{ vars.API_URL }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
   deploy:
     runs-on: ubuntu-latest
     needs: publish
+    permissions:
+      packages: read
 
     steps:
+      - uses: actions/checkout@v4
+
       - name: Deploy to VPS
-        uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ vars.VPS_HOST }}
-          username: ${{ vars.VPS_USER }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          script: |
+        env:
+          SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ vars.VPS_HOST }} >> ~/.ssh/known_hosts
+
+          # Copy compose file to VPS
+          scp -i ~/.ssh/deploy_key docker-compose.prod.yml \
+            ${{ vars.VPS_USER }}@${{ vars.VPS_HOST }}:/opt/apps/fortyone/docker-compose.prod.yml
+
+          # Write .env and restart on VPS
+          ssh -i ~/.ssh/deploy_key ${{ vars.VPS_USER }}@${{ vars.VPS_HOST }} bash <<'ENDSSH'
             set -e
             mkdir -p /opt/apps/fortyone
-
-            # Write .env from GitHub variables and secrets
             printf 'HOST=%s\nALLOWED_ORIGIN=%s\nLOG_LEVEL=%s\nJWT_SECRET=%s\n' \
               '${{ vars.HOST }}' \
               '${{ vars.ALLOWED_ORIGIN }}' \
               '${{ vars.LOG_LEVEL }}' \
               '${{ secrets.JWT_SECRET }}' \
               > /opt/apps/fortyone/.env
-
-            # Pull latest images and restart
-            docker compose -f /opt/apps/fortyone/docker-compose.prod.yml pull
-            docker compose -f /opt/apps/fortyone/docker-compose.prod.yml up -d
+            echo '${{ secrets.GITHUB_TOKEN }}' | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            cd /opt/apps/fortyone
+            docker compose -f docker-compose.prod.yml pull
+            docker compose -f docker-compose.prod.yml up -d
+          ENDSSH
