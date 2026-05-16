@@ -1,7 +1,6 @@
 use crate::context::game_state::{GameState, GameStatus, PlayerPhase};
 use crate::utils::card_class;
 use std::rc::Rc;
-use web_sys::console::log_1;
 use web_sys::MouseEvent;
 use yew::{classes, html, Callback, Component, Context, ContextHandle, Html, Properties};
 
@@ -98,7 +97,6 @@ impl Component for ThePlayer {
 
         let on_discard = Callback::from(move |(card, e): (String, MouseEvent)| {
             e.prevent_default();
-            log_1(&"Discarded card".into());
             if is_discard_phase {
                 discard_cb.emit(card);
             }
@@ -106,7 +104,6 @@ impl Component for ThePlayer {
 
         let on_close = Callback::from(move |(card, e): (String, MouseEvent)| {
             e.prevent_default();
-            log_1(&"Discarded card".into());
             if is_discard_phase {
                 close_cb.emit(card);
             }
