@@ -67,6 +67,10 @@ jobs:
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -H ${{ vars.VPS_HOST }} >> ~/.ssh/known_hosts
 
+          # Ensure app directory exists before scp
+          ssh -i ~/.ssh/deploy_key ${{ vars.VPS_USER }}@${{ vars.VPS_HOST }} \
+            "mkdir -p /opt/apps/fortyone"
+
           # Copy compose file to VPS
           scp -i ~/.ssh/deploy_key docker-compose.prod.yml \
             ${{ vars.VPS_USER }}@${{ vars.VPS_HOST }}:/opt/apps/fortyone/docker-compose.prod.yml
@@ -74,7 +78,6 @@ jobs:
           # Write .env and restart on VPS
           ssh -i ~/.ssh/deploy_key ${{ vars.VPS_USER }}@${{ vars.VPS_HOST }} bash <<'ENDSSH'
             set -e
-            mkdir -p /opt/apps/fortyone
             printf 'HOST=%s\nALLOWED_ORIGIN=%s\nLOG_LEVEL=%s\nJWT_SECRET=%s\n' \
               '${{ vars.HOST }}' \
               '${{ vars.ALLOWED_ORIGIN }}' \
