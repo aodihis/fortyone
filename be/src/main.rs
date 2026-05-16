@@ -82,7 +82,7 @@ async fn main() {
     }
 
     let store = Arc::new(RedisGameStore::new(redis_pool, config.redis_key_prefix.clone()));
-    let app_state = AppState::new(store);
+    let app_state = AppState::new(store, config.reconnect_timeout_secs);
     let jwt_secret = Arc::new(config.jwt_secret.clone());
 
     let router = create_router(app_state, cors)

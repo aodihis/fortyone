@@ -7,6 +7,7 @@ pub struct Config {
     pub jwt_secret: String,
     pub redis_url: String,
     pub redis_key_prefix: String,
+    pub reconnect_timeout_secs: u64,
 }
 
 impl Config {
@@ -27,6 +28,10 @@ impl Config {
         });
         let redis_key_prefix =
             env::var("REDIS_KEY_PREFIX").unwrap_or_else(|_| "fortyone".to_string());
+        let reconnect_timeout_secs = env::var("RECONNECT_TIMEOUT_SECS")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(120u64);
 
         Self {
             server_address,
@@ -34,6 +39,7 @@ impl Config {
             jwt_secret,
             redis_url,
             redis_key_prefix,
+            reconnect_timeout_secs,
         }
     }
 }

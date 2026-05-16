@@ -11,7 +11,7 @@ const TEST_SECRET: &str = "test-secret-key";
 
 fn make_server() -> TestServer {
     let store = Arc::new(MemoryGameStore::new());
-    let state = AppState::new(store);
+    let state = AppState::new(store, 120);
     let jwt_secret = Arc::new(TEST_SECRET.to_string());
     let router = create_router(state, CorsLayer::permissive())
         .layer(Extension(jwt_secret));

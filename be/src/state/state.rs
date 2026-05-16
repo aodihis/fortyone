@@ -6,6 +6,7 @@ use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::mpsc::UnboundedSender;
+use tokio::task::AbortHandle;
 use uuid::Uuid;
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -16,18 +17,23 @@ pub enum GameStateStatus {
 }
 
 type SenderMap = Arc<DashMap<String, DashMap<Uuid, (String, UnboundedSender<Message>)>>>;
+type ReconnectTimerMap = Arc<DashMap<String, DashMap<Uuid, AbortHandle>>>;
 
 #[derive(Clone)]
 pub struct AppState {
     pub store: Arc<dyn GameStore>,
     pub senders: SenderMap,
+    pub reconnect_timers: ReconnectTimerMap,
+    pub reconnect_timeout_secs: u64,
 }
 
 impl AppState {
-    pub fn new(store: Arc<dyn GameStore>) -> Self {
+    pub fn new(store: Arc<dyn GameStore>, reconnect_timeout_secs: u64) -> Self {
         Self {
             store,
             senders: Arc::new(DashMap::new()),
+            reconnect_timers: Arc::new(DashMap::new()),
+            reconnect_timeout_secs,
         }
     }
 
