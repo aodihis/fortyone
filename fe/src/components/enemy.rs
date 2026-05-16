@@ -87,14 +87,14 @@ impl Component for Enemy {
                             last_five_bin.iter().rev().map(|x| {
                                 let card_class = card_class(x);
                                 html! {
-                                    <div class={classes!("discard-card", card_class)} ></div>
+                                    <div key={(*x).clone()} class={classes!("discard-card", card_class)}></div>
                                 }
                             }).collect::<Html>()
                     }
                 </div>
                 <div class="player-area">
                     {
-                        items.iter().map(|_| html!{<div class="card card-back"></div>}).collect::<Html>()
+                        items.iter().map(|i| html!{<div key={i.to_string()} class="card card-back"></div>}).collect::<Html>()
                     }
                 </div>
                 <div class="player-name"><span>{self.name.clone()}</span>

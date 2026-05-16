@@ -116,7 +116,7 @@ impl Component for ThePlayer {
                             last_five_bin.iter().rev().map(|x| {
                                 let card_class = card_class(x);
                                 html! {
-                                    <div class={classes!("discard-card", card_class)}></div>
+                                    <div key={(*x).clone()} class={classes!("discard-card", card_class)}></div>
                                 }
                             }).collect::<Html>()
                         }
@@ -161,7 +161,7 @@ impl Component for ThePlayer {
                                     })
                                 };
                                 html!{
-                                    <div class={classes!("card", card_class)} oncontextmenu={oncontextmenu} onclick={onclick}></div>
+                                    <div key={h.clone()} class={classes!("card", card_class)} oncontextmenu={oncontextmenu} onclick={onclick}></div>
                                 }
                             }).collect::<Html>()
                         }

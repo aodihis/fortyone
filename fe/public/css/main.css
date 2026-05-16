@@ -426,6 +426,7 @@ button:active { transform: translateY(0); }
   background-position: center;
   background-repeat: no-repeat;
   box-shadow: 1px 1px 5px rgba(0, 0, 0, 0.5);
+  animation: card-arrive 0.3s ease-out both;
 }
 
 .top-enemy .discard-card:nth-child(1) { transform: rotate(185deg); }
@@ -451,6 +452,55 @@ button:active { transform: translateY(0); }
 .current-player-enemy .discard-card:nth-child(3) { transform: rotate(145deg) translateX(-8px); }
 .current-player .discard-card:nth-child(4) { transform: rotate(220deg) translateX(10px); }
 .current-player .discard-card:nth-child(5) { transform: rotate(203deg) translateX(-13px); }
+
+/* ── Card animations ─────────────────────────────── */
+
+/* Card drawn from deck into player's hand */
+@keyframes card-draw {
+  from {
+    transform: translateY(52px) scale(0.78) rotate(-4deg);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0) scale(1) rotate(0deg);
+    opacity: 1;
+  }
+}
+
+/* Card arriving in any discard pile (opacity+filter only — avoids
+   conflicting with the per-nth-child transform rules) */
+@keyframes card-arrive {
+  from {
+    opacity: 0;
+    filter: brightness(2.5) blur(2px);
+  }
+  to {
+    opacity: 1;
+    filter: brightness(1) blur(0px);
+  }
+}
+
+/* Enemy card-back appearing (draw or initial deal) */
+@keyframes card-appear {
+  from {
+    transform: scale(0.65);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.current-player .player-area .card {
+  animation: card-draw 0.34s cubic-bezier(0.34, 1.48, 0.64, 1) both;
+}
+
+.top-enemy .player-area .card,
+.left-enemy .player-area .card,
+.right-enemy .player-area .card {
+  animation: card-appear 0.3s ease-out both;
+}
 
 /* ── Deal animation ───────────────────────────────── */
 .starting-card {
