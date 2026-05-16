@@ -1,0 +1,11 @@
+services:
+  - name: fortyone-be
+    type: web
+    runtime: rust
+    region: oregon
+    plan: free
+    buildCommand: "cargo build --release"
+    startCommand: "./target/release/fortyone-be"
+    envVars:
+      - key: SERVER_ADDRESS
+        value: "0.0.0.0:3000"
