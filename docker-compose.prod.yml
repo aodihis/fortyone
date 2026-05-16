@@ -9,12 +9,15 @@
 networks:
   traefik:
     external: true  # the Docker network your Traefik instance is attached to
+  shared-network:
+    external: true  # shared network for cross-project services (Redis, etc.)
 
 services:
   be:
     image: ghcr.io/aodihis/fortyone-be:latest
     networks:
       - traefik
+      - shared-network
     environment:
       SERVER_ADDRESS: "0.0.0.0:3000"
       ALLOWED_ORIGIN: "${ALLOWED_ORIGIN}"
