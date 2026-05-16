@@ -20,6 +20,8 @@ services:
       ALLOWED_ORIGIN: "${ALLOWED_ORIGIN}"
       JWT_SECRET: "${JWT_SECRET}"
       LOG_LEVEL: "${LOG_LEVEL:-info}"
+      REDIS_URL: "${REDIS_URL}"
+      REDIS_KEY_PREFIX: "${REDIS_KEY_PREFIX:-fortyone}"
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=traefik"

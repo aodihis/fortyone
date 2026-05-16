@@ -2,7 +2,8 @@ use crate::auth::{create_token, validate_token};
 use crate::engine::card::Card;
 use crate::engine::game::{Game, GamePhase, MAX_PLAYER};
 use crate::error::AppError;
-use crate::state::state::{GameManager, GameState, GameStateStatus};
+use crate::state::redis_types::PersistedGameState;
+use crate::state::state::{AppState, GameStateStatus};
 use axum::extract::Query;
 use axum::http::StatusCode;
 use axum::{
@@ -16,7 +17,6 @@ use axum::{
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use tokio::sync::RwLock;
 use uuid::Uuid;
 
 // ─── Response types ───────────────────────────────────────────────────────────
@@ -143,16 +143,14 @@ struct GameEvent {
     to: Option<u8>,
 }
 
-// ─── Shared state type alias ──────────────────────────────────────────────────
-
-type AppState = Arc<RwLock<GameManager>>;
-
 // ─── HTTP handlers ────────────────────────────────────────────────────────────
 
-pub async fn create_game(State(state): State<AppState>) -> Result<Json<CreateGameResponse>, AppError> {
-    let game = state.write().await.create_game();
-    tracing::info!(game_id = %game.id, "Game created");
-    Ok(Json(CreateGameResponse { game_id: game.id }))
+pub async fn create_game(
+    State(state): State<AppState>,
+) -> Result<Json<CreateGameResponse>, AppError> {
+    let game_id = state.create_game().await?;
+    tracing::info!(game_id = %game_id, "Game created");
+    Ok(Json(CreateGameResponse { game_id }))
 }
 
 #[derive(Debug, Deserialize)]
@@ -164,7 +162,6 @@ pub async fn join_game(
     Path(game_id): Path<String>,
     Query(params): Query<JoinParams>,
     State(state): State<AppState>,
-    // JWT secret injected via extension
     axum::Extension(jwt_secret): axum::Extension<Arc<String>>,
 ) -> Result<Json<JoinGameResponse>, AppError> {
     validate_game_id(&game_id)?;
@@ -183,22 +180,19 @@ pub async fn join_game(
 
     let player_id = Uuid::new_v4();
 
-    {
-        let game_manager = state.read().await;
-        let game_state = game_manager
-            .games
-            .get(&game_id)
-            .ok_or(AppError::GameNotFound)?;
+    let persisted = state
+        .get_game(&game_id)
+        .await?
+        .ok_or(AppError::GameNotFound)?;
 
-        if game_state.status != GameStateStatus::Lobby {
-            return Err(AppError::GameAlreadyStarted);
-        }
-        if game_state.players.len() >= MAX_PLAYER {
-            return Err(AppError::GameFull);
-        }
-        if game_state.players.values().any(|(name, _)| name == &player_name) {
-            return Err(AppError::InvalidInput("Name already taken".into()));
-        }
+    if persisted.status != GameStateStatus::Lobby {
+        return Err(AppError::GameAlreadyStarted);
+    }
+    if persisted.players.len() >= MAX_PLAYER {
+        return Err(AppError::GameFull);
+    }
+    if persisted.players.iter().any(|(_, name)| name == &player_name) {
+        return Err(AppError::InvalidInput("Name already taken".into()));
     }
 
     let token = create_token(&game_id, player_id, &player_name, &jwt_secret)?;
@@ -241,21 +235,20 @@ pub async fn ws_handler(
     };
     let player_name = claims.player_name;
 
-    {
-        let game_manager = state.read().await;
-        if !game_manager.games.contains_key(&game_id) {
-            return (StatusCode::NOT_FOUND, "Game not found").into_response();
-        }
-        let gs = &game_manager.games[&game_id];
-        if gs.status != GameStateStatus::Lobby {
-            return (StatusCode::BAD_REQUEST, "Game already started").into_response();
-        }
-        if gs.players.len() >= MAX_PLAYER {
-            return (StatusCode::BAD_REQUEST, "Game is full").into_response();
-        }
-        if gs.players.values().any(|(name, _)| name == &player_name) {
-            return (StatusCode::BAD_REQUEST, "Name already taken").into_response();
-        }
+    let persisted = match state.get_game(&game_id).await {
+        Ok(Some(p)) => p,
+        Ok(None) => return (StatusCode::NOT_FOUND, "Game not found").into_response(),
+        Err(_) => return (StatusCode::INTERNAL_SERVER_ERROR, "Storage error").into_response(),
+    };
+
+    if persisted.status != GameStateStatus::Lobby {
+        return (StatusCode::BAD_REQUEST, "Game already started").into_response();
+    }
+    if persisted.players.len() >= MAX_PLAYER {
+        return (StatusCode::BAD_REQUEST, "Game is full").into_response();
+    }
+    if persisted.players.iter().any(|(_, name)| name == &player_name) {
+        return (StatusCode::BAD_REQUEST, "Name already taken").into_response();
     }
 
     ws.on_upgrade(move |socket| {
@@ -283,24 +276,42 @@ async fn handle_game_connection(
         }
     });
 
-    // Register player
+    // Register player: in-memory sender + Redis state
     {
-        let mut write_state = state.write().await;
-        let Some(game_state) = write_state.games.get_mut(&game_id) else {
+        let lock = state.game_lock(&game_id);
+        let _guard = lock.lock().await;
+
+        let mut persisted = match state.get_game(&game_id).await {
+            Ok(Some(p)) => p,
+            _ => {
+                send_task.abort();
+                return;
+            }
+        };
+
+        state
+            .senders
+            .entry(game_id.clone())
+            .or_default()
+            .insert(player_id, (player_name.clone(), tx.clone()));
+
+        persisted.players.push((player_id, player_name.clone()));
+
+        if let Err(e) = state.save_game(&persisted).await {
+            tracing::error!("Failed to register player in Redis: {e}");
             send_task.abort();
             return;
-        };
-        game_state.players.insert(player_id, (player_name.clone(), tx.clone()));
+        }
 
-        let join_json = PlayerInfoMessage {
+        let join_msg = PlayerInfoMessage {
             status: "success".to_string(),
             message_type: MessageType::PlayerJoin,
             data: PlayerInfoData {
-                players: player_list(game_state),
+                players: player_list(&persisted),
             },
             message: Some(format!("{player_name} joined game")),
         };
-        broadcast_text(game_state, &join_json);
+        broadcast_text(&state, &game_id, &join_msg);
     }
 
     // Message loop
@@ -328,26 +339,42 @@ async fn handle_game_connection(
 
     // Cleanup on disconnect
     {
-        let mut write_state = state.write().await;
-        if let Some(game_state) = write_state.games.get_mut(&game_id) {
-            game_state.players.remove(&player_id);
-            if let Some(game) = &mut game_state.game {
-                let _ = game.remove_player(&player_id);
-            }
-            let leave_json = PlayerInfoMessage {
-                message_type: MessageType::PlayerLeft,
-                status: "success".to_string(),
-                data: PlayerInfoData {
-                    players: player_list(game_state),
-                },
-                message: Some(format!("{player_name} left game")),
-            };
-            broadcast_text(game_state, &leave_json);
+        let lock = state.game_lock(&game_id);
+        let _guard = lock.lock().await;
 
-            if game_state.players.is_empty() {
-                write_state.games.remove(&game_id);
-                tracing::info!(game_id = %game_id, "Game removed (all players left)");
+        if let Some(game_senders) = state.senders.get(&game_id) {
+            game_senders.remove(&player_id);
+        }
+
+        match state.get_game(&game_id).await {
+            Ok(Some(mut persisted)) => {
+                persisted.players.retain(|(id, _)| *id != player_id);
+                if let Some(game) = &mut persisted.game {
+                    let _ = game.remove_player(&player_id);
+                }
+
+                let leave_msg = PlayerInfoMessage {
+                    message_type: MessageType::PlayerLeft,
+                    status: "success".to_string(),
+                    data: PlayerInfoData {
+                        players: player_list(&persisted),
+                    },
+                    message: Some(format!("{player_name} left game")),
+                };
+                broadcast_text(&state, &game_id, &leave_msg);
+
+                if persisted.players.is_empty() {
+                    if let Err(e) = state.delete_game(&game_id).await {
+                        tracing::error!("Failed to delete game {game_id}: {e}");
+                    } else {
+                        tracing::info!(game_id = %game_id, "Game removed (all players left)");
+                    }
+                } else if let Err(e) = state.save_game(&persisted).await {
+                    tracing::error!("Failed to save game after disconnect: {e}");
+                }
             }
+            Ok(None) => {}
+            Err(e) => tracing::error!("Redis error on disconnect cleanup: {e}"),
         }
     }
 
@@ -362,67 +389,85 @@ async fn handle_game_data(
     game_id: &str,
     data: GameRequest,
 ) {
-    let mut write_state = state.write().await;
-    let Some(game_state) = write_state.games.get_mut(game_id) else {
-        tracing::warn!(game_id = %game_id, "handle_game_data: game not found");
-        return;
+    let lock = state.game_lock(game_id);
+    let _guard = lock.lock().await;
+
+    let mut persisted = match state.get_game(game_id).await {
+        Ok(Some(p)) => p,
+        Ok(None) => {
+            tracing::warn!(game_id = %game_id, "handle_game_data: game not found");
+            return;
+        }
+        Err(e) => {
+            tracing::error!("Redis error in handle_game_data: {e}");
+            return;
+        }
     };
 
     if data.action == GameRequestAction::StartGame {
-        if game_state.game.is_none() {
-            let player_list: Vec<Uuid> = game_state.players.keys().cloned().collect();
+        if persisted.game.is_none() {
+            let player_list: Vec<Uuid> = persisted.players.iter().map(|(id, _)| *id).collect();
             match Game::new(player_list) {
                 Ok(game) => {
-                    game_state.game = Some(game);
-                    game_state.status = GameStateStatus::InProgress;
+                    persisted.game = Some(game);
+                    persisted.status = GameStateStatus::InProgress;
                     let event = GameEvent {
                         event_type: GameEventType::GameStart,
                         from: None,
                         to: None,
                     };
-                    broadcast_game_message(game_state, event);
+                    broadcast_game_message(state, game_id, &persisted, event);
+                    if let Err(e) = state.save_game(&persisted).await {
+                        tracing::error!("Failed to save game after start: {e}");
+                    }
                 }
                 Err(e) => {
                     tracing::error!("Failed to start game: {e:?}");
-                    send_failed_reply(game_state, &player_id);
+                    send_failed_reply(state, game_id, &player_id);
                 }
             }
         } else {
-            send_failed_reply(game_state, &player_id);
+            send_failed_reply(state, game_id, &player_id);
         }
         return;
     }
 
-    if game_state.game.is_none() {
-        send_failed_reply(game_state, &player_id);
+    if persisted.game.is_none() {
+        send_failed_reply(state, game_id, &player_id);
         return;
     }
 
-    let game = game_state.game.as_mut().unwrap();
+    let game = persisted.game.as_mut().unwrap();
     let player_pos = match game.player_pos(&player_id) {
         Some(p) => p as u8,
         None => {
             tracing::warn!(player_id = %player_id, "Player not in game");
-            send_failed_reply(game_state, &player_id);
+            send_failed_reply(state, game_id, &player_id);
             return;
         }
     };
 
+    let mut save = true;
     match data.action {
         GameRequestAction::Draw => match game.draw(&player_id) {
             Ok(_) => broadcast_game_message(
-                game_state,
+                state,
+                game_id,
+                &persisted,
                 GameEvent { event_type: GameEventType::Draw, from: None, to: Some(player_pos) },
             ),
             Err(e) => {
                 tracing::debug!("Draw failed: {e:?}");
-                send_failed_reply(game_state, &player_id);
+                send_failed_reply(state, game_id, &player_id);
+                save = false;
             }
         },
 
         GameRequestAction::TakeBin => match game.take_bin(&player_id) {
             Ok(_) => broadcast_game_message(
-                game_state,
+                state,
+                game_id,
+                &persisted,
                 GameEvent {
                     event_type: GameEventType::TakeBin,
                     from: Some(player_pos),
@@ -431,7 +476,8 @@ async fn handle_game_data(
             ),
             Err(e) => {
                 tracing::debug!("TakeBin failed: {e:?}");
-                send_failed_reply(game_state, &player_id);
+                send_failed_reply(state, game_id, &player_id);
+                save = false;
             }
         },
 
@@ -439,7 +485,7 @@ async fn handle_game_data(
             let card = match parse_card(&data.card) {
                 Some(c) => c,
                 None => {
-                    send_failed_reply(game_state, &player_id);
+                    send_failed_reply(state, game_id, &player_id);
                     return;
                 }
             };
@@ -452,21 +498,22 @@ async fn handle_game_data(
                             from: Some(player_pos),
                             to: Some(next_turn as u8),
                         };
-                        broadcast_game_message(game_state, event);
-                        game_state.status = GameStateStatus::Finished;
-                        broadcast_end_game_message(game_state);
+                        broadcast_game_message(state, game_id, &persisted, event);
+                        persisted.status = GameStateStatus::Finished;
+                        broadcast_end_game_message(state, game_id, &persisted);
                     } else {
                         let event = GameEvent {
                             event_type: GameEventType::Discard,
                             from: Some(player_pos),
                             to: Some(res.next_turn),
                         };
-                        broadcast_game_message(game_state, event);
+                        broadcast_game_message(state, game_id, &persisted, event);
                     }
                 }
                 Err(e) => {
                     tracing::debug!("Discard failed: {e:?}");
-                    send_failed_reply(game_state, &player_id);
+                    send_failed_reply(state, game_id, &player_id);
+                    save = false;
                 }
             }
         }
@@ -475,7 +522,7 @@ async fn handle_game_data(
             let card = match parse_card(&data.card) {
                 Some(c) => c,
                 None => {
-                    send_failed_reply(game_state, &player_id);
+                    send_failed_reply(state, game_id, &player_id);
                     return;
                 }
             };
@@ -487,18 +534,25 @@ async fn handle_game_data(
                         from: Some(player_pos),
                         to: Some(next_turn as u8),
                     };
-                    broadcast_game_message(game_state, event);
-                    game_state.status = GameStateStatus::Finished;
-                    broadcast_end_game_message(game_state);
+                    broadcast_game_message(state, game_id, &persisted, event);
+                    persisted.status = GameStateStatus::Finished;
+                    broadcast_end_game_message(state, game_id, &persisted);
                 }
                 Err(e) => {
                     tracing::debug!("Close failed: {e:?}");
-                    send_failed_reply(game_state, &player_id);
+                    send_failed_reply(state, game_id, &player_id);
+                    save = false;
                 }
             }
         }
 
         GameRequestAction::StartGame => {} // handled above
+    }
+
+    if save {
+        if let Err(e) = state.save_game(&persisted).await {
+            tracing::error!("Failed to save game state: {e}");
+        }
     }
 }
 
@@ -508,11 +562,11 @@ fn parse_card(card_str: &Option<String>) -> Option<Card> {
     card_str.as_deref().and_then(Card::from_string)
 }
 
-fn player_list(game_state: &GameState) -> Vec<PlayerData> {
-    game_state
+fn player_list(persisted: &PersistedGameState) -> Vec<PlayerData> {
+    persisted
         .players
-        .values()
-        .map(|(name, _)| PlayerData {
+        .iter()
+        .map(|(_, name)| PlayerData {
             name: name.clone(),
             hand: vec![],
             bin: vec![],
@@ -520,69 +574,91 @@ fn player_list(game_state: &GameState) -> Vec<PlayerData> {
         .collect()
 }
 
-fn send_failed_reply(game_state: &mut GameState, player_id: &Uuid) {
+fn send_failed_reply(state: &AppState, game_id: &str, player_id: &Uuid) {
     let res = GameResponse {
         status: "failed".to_string(),
         message_type: MessageType::Reply,
     };
     let Ok(text) = serde_json::to_string(&res) else { return };
-    if let Some((_, tx)) = game_state.players.get(player_id) {
-        if let Err(e) = tx.send(Message::Text(text.into())) {
-            tracing::warn!("Failed to send reply to {player_id}: {e}");
+    if let Some(game_senders) = state.senders.get(game_id) {
+        if let Some(entry) = game_senders.get(player_id) {
+            let (_, tx) = entry.value();
+            if let Err(e) = tx.send(Message::Text(text.into())) {
+                tracing::warn!("Failed to send reply to {player_id}: {e}");
+            }
         }
     }
 }
 
-fn broadcast_text<T: Serialize>(game_state: &mut GameState, msg: &T) {
+fn broadcast_text<T: Serialize>(state: &AppState, game_id: &str, msg: &T) {
     let Ok(text) = serde_json::to_string(msg) else { return };
-    for (_, tx) in game_state.players.values() {
+    let Some(game_senders) = state.senders.get(game_id) else { return };
+    for entry in game_senders.iter() {
+        let (_, tx) = entry.value();
         if let Err(e) = tx.send(Message::Text(text.clone().into())) {
             tracing::warn!("Broadcast send error: {e}");
         }
     }
 }
 
-fn broadcast_end_game_message(game_state: &mut GameState) {
-    let Some(game) = &game_state.game else { return };
+fn broadcast_end_game_message(
+    state: &AppState,
+    game_id: &str,
+    persisted: &PersistedGameState,
+) {
+    let Some(game) = &persisted.game else { return };
     let scores: Vec<EndGameScores> = game
         .players
         .iter()
         .map(|player| EndGameScores {
-            name: game_state
+            name: persisted
                 .players
-                .get(&player.id)
-                .map(|(n, _)| n.clone())
+                .iter()
+                .find(|(id, _)| *id == player.id)
+                .map(|(_, n)| n.clone())
                 .unwrap_or_default(),
             score: player.score(),
             hand: player.hand.iter().map(|c| c.to_string()).collect(),
         })
         .collect();
     let winner_name = game.winner().and_then(|w| {
-        game_state.players.get(&w.id).map(|(n, _)| n.clone())
+        persisted
+            .players
+            .iter()
+            .find(|(id, _)| *id == w.id)
+            .map(|(_, n)| n.clone())
     });
     let msg = EndGameMessage {
         status: "success".to_string(),
         message_type: MessageType::EndGame,
         data: EndGameData { winner_name, players: scores },
     };
-    broadcast_text(game_state, &msg);
+    broadcast_text(state, game_id, &msg);
 }
 
-fn broadcast_game_message(game_state: &mut GameState, game_event: GameEvent) {
-    let Some(game) = &game_state.game else { return };
-    let player_ids: Vec<Uuid> = game_state.players.keys().cloned().collect();
-    for id in &player_ids {
-        let Some(pos) = game.player_pos(id) else { continue };
+fn broadcast_game_message(
+    state: &AppState,
+    game_id: &str,
+    persisted: &PersistedGameState,
+    game_event: GameEvent,
+) {
+    let Some(game) = &persisted.game else { return };
+    let Some(game_senders) = state.senders.get(game_id) else { return };
+
+    for sender_entry in game_senders.iter() {
+        let id = *sender_entry.key();
+        let Some(pos) = game.player_pos(&id) else { continue };
         let mut players = vec![];
         for (i, p) in game.players.iter().enumerate() {
-            let name = game_state
+            let name = persisted
                 .players
-                .get(&p.id)
-                .map(|(n, _)| n.clone())
+                .iter()
+                .find(|(pid, _)| *pid == p.id)
+                .map(|(_, n)| n.clone())
                 .unwrap_or_default();
             players.push(PlayerData {
                 name,
-                hand: if p.id == *id {
+                hand: if p.id == id {
                     p.hand.iter().map(|c| c.to_string()).collect()
                 } else {
                     vec!["".to_string(); game.players[i].hand.len()]
@@ -595,9 +671,9 @@ fn broadcast_game_message(game_state: &mut GameState, game_event: GameEvent) {
             status: "success".to_string(),
             message: None,
             data: Some(GameData {
-                player_id: *id,
+                player_id: id,
                 player_pos: pos as u8,
-                num_of_players: game_state.players.len() as u8,
+                num_of_players: persisted.players.len() as u8,
                 card_left: game.card_left(),
                 current_turn: game.current_turn as u8,
                 current_phase: game.phase.clone(),
@@ -606,10 +682,9 @@ fn broadcast_game_message(game_state: &mut GameState, game_event: GameEvent) {
             }),
         };
         let Ok(text) = serde_json::to_string(&msg) else { continue };
-        if let Some((_, tx)) = game_state.players.get(id) {
-            if let Err(e) = tx.send(Message::Text(text.into())) {
-                tracing::warn!("Failed to send game message to {id}: {e}");
-            }
+        let (_, tx) = sender_entry.value();
+        if let Err(e) = tx.send(Message::Text(text.into())) {
+            tracing::warn!("Failed to send game message to {id}: {e}");
         }
     }
 }

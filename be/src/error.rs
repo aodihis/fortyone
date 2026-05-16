@@ -18,6 +18,12 @@ pub enum AppError {
     Unauthorized,
     #[error("Internal error")]
     Internal,
+    #[error("Storage error")]
+    Redis(#[from] deadpool_redis::PoolError),
+    #[error("Storage error")]
+    RedisCmd(#[from] redis::RedisError),
+    #[error("Serialization error")]
+    Json(#[from] serde_json::Error),
 }
 
 impl axum::response::IntoResponse for AppError {
@@ -29,7 +35,9 @@ impl axum::response::IntoResponse for AppError {
                 StatusCode::BAD_REQUEST
             }
             AppError::NotEnoughPlayers => StatusCode::BAD_REQUEST,
-            AppError::Internal => StatusCode::INTERNAL_SERVER_ERROR,
+            AppError::Internal | AppError::Redis(_) | AppError::RedisCmd(_) | AppError::Json(_) => {
+                StatusCode::INTERNAL_SERVER_ERROR
+            }
         };
         tracing::warn!("Request error: {self}");
         (status, self.to_string()).into_response()

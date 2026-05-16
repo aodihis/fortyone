@@ -1,12 +1,13 @@
 use crate::config::Config;
 use crate::routes::game::create_router;
-use crate::state::state::GameManager;
+use crate::state::redis_store::RedisGameStore;
+use crate::state::state::AppState;
 use axum::Extension;
+use deadpool_redis::Runtime;
 use http::{HeaderValue, Method};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::net::TcpListener;
-use tokio::sync::RwLock;
 use tower_governor::{governor::GovernorConfigBuilder, GovernorLayer};
 use tower_http::cors::{Any, CorsLayer};
 use tracing_subscriber::EnvFilter;
@@ -63,10 +64,28 @@ async fn main() {
         .await
         .expect("Failed to bind to address");
 
-    let game_state = Arc::new(RwLock::new(GameManager::new()));
+    let redis_cfg = deadpool_redis::Config::from_url(&config.redis_url);
+    let redis_pool = redis_cfg
+        .create_pool(Some(Runtime::Tokio1))
+        .expect("Failed to create Redis pool");
+
+    {
+        let mut conn = redis_pool
+            .get()
+            .await
+            .expect("Cannot connect to Redis on startup");
+        let _: String = redis::cmd("PING")
+            .query_async(&mut *conn)
+            .await
+            .expect("Redis PING failed — check REDIS_URL");
+        tracing::info!("Redis connection verified");
+    }
+
+    let store = Arc::new(RedisGameStore::new(redis_pool, config.redis_key_prefix.clone()));
+    let app_state = AppState::new(store);
     let jwt_secret = Arc::new(config.jwt_secret.clone());
 
-    let router = create_router(game_state, cors)
+    let router = create_router(app_state, cors)
         .layer(Extension(jwt_secret))
         .layer(GovernorLayer::new(governor_conf));
 

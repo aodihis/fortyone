@@ -78,11 +78,13 @@ jobs:
           # Write .env and restart on VPS
           ssh -i ~/.ssh/deploy_key ${{ vars.VPS_USER }}@${{ vars.VPS_HOST }} bash <<'ENDSSH'
             set -e
-            printf 'HOST=%s\nALLOWED_ORIGIN=%s\nLOG_LEVEL=%s\nJWT_SECRET=%s\n' \
+            printf 'HOST=%s\nALLOWED_ORIGIN=%s\nLOG_LEVEL=%s\nJWT_SECRET=%s\nREDIS_URL=%s\nREDIS_KEY_PREFIX=%s\n' \
               '${{ vars.HOST }}' \
               '${{ vars.ALLOWED_ORIGIN }}' \
               '${{ vars.LOG_LEVEL }}' \
               '${{ secrets.JWT_SECRET }}' \
+              '${{ secrets.REDIS_URL }}' \
+              '${{ vars.REDIS_KEY_PREFIX }}' \
               > /opt/apps/fortyone/.env
             echo '${{ secrets.GITHUB_TOKEN }}' | docker login ghcr.io -u ${{ github.actor }} --password-stdin
             cd /opt/apps/fortyone

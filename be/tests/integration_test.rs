@@ -1,16 +1,17 @@
 use axum::Extension;
 use axum_test::TestServer;
 use fortyone_be::routes::game::create_router;
-use fortyone_be::state::state::GameManager;
+use fortyone_be::state::memory_store::MemoryGameStore;
+use fortyone_be::state::state::AppState;
 use serde_json::Value;
 use std::sync::Arc;
-use tokio::sync::RwLock;
 use tower_http::cors::CorsLayer;
 
 const TEST_SECRET: &str = "test-secret-key";
 
 fn make_server() -> TestServer {
-    let state = Arc::new(RwLock::new(GameManager::new()));
+    let store = Arc::new(MemoryGameStore::new());
+    let state = AppState::new(store);
     let jwt_secret = Arc::new(TEST_SECRET.to_string());
     let router = create_router(state, CorsLayer::permissive())
         .layer(Extension(jwt_secret));

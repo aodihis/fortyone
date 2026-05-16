@@ -1,4 +1,10 @@
 services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    command: redis-server --save "" --appendonly no
+
   be:
     build: ./be
     environment:
@@ -6,8 +12,12 @@ services:
       ALLOWED_ORIGIN: "${ALLOWED_ORIGIN:-*}"
       JWT_SECRET: "${JWT_SECRET:-dev_secret}"
       LOG_LEVEL: "${LOG_LEVEL:-debug}"
+      REDIS_URL: "redis://redis:6379/"
+      REDIS_KEY_PREFIX: "${REDIS_KEY_PREFIX:-fortyone}"
     ports:
       - "3000:3000"
+    depends_on:
+      - redis
 
   fe:
     build:

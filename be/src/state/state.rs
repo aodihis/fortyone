@@ -1,53 +1,53 @@
-use crate::engine::game::Game;
-use crate::utils::generate_short_uuid;
-use serde::Serialize;
-use std::collections::HashMap;
+use crate::error::AppError;
+use crate::state::redis_types::PersistedGameState;
+use crate::state::store::GameStore;
+use axum::extract::ws::Message;
+use dashmap::DashMap;
+use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+use tokio::sync::mpsc::UnboundedSender;
 use uuid::Uuid;
 
-#[derive(Clone, Debug, Serialize, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub enum GameStateStatus {
     Lobby,
     InProgress,
     Finished,
 }
 
+type SenderMap = Arc<DashMap<String, DashMap<Uuid, (String, UnboundedSender<Message>)>>>;
+
 #[derive(Clone)]
-pub struct GameState {
-    pub id: String,
-    pub status: GameStateStatus,
-    pub game: Option<Game>,
-    pub players:
-        HashMap<Uuid, (String, tokio::sync::mpsc::UnboundedSender<axum::extract::ws::Message>)>,
+pub struct AppState {
+    pub store: Arc<dyn GameStore>,
+    pub senders: SenderMap,
 }
 
-pub struct GameManager {
-    pub games: HashMap<String, GameState>,
-}
-
-impl Default for GameManager {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl GameManager {
-    pub fn new() -> Self {
+impl AppState {
+    pub fn new(store: Arc<dyn GameStore>) -> Self {
         Self {
-            games: HashMap::new(),
+            store,
+            senders: Arc::new(DashMap::new()),
         }
     }
 
-    pub fn create_game(&mut self) -> GameState {
-        // Purge any finished games before creating a new one to bound memory usage.
-        self.games.retain(|_, gs| gs.status != GameStateStatus::Finished || !gs.players.is_empty());
+    pub async fn create_game(&self) -> Result<String, AppError> {
+        self.store.create_game().await
+    }
 
-        let game = GameState {
-            id: generate_short_uuid(),
-            status: GameStateStatus::Lobby,
-            game: None,
-            players: HashMap::new(),
-        };
-        self.games.insert(game.id.clone(), game.clone());
-        game
+    pub async fn get_game(&self, game_id: &str) -> Result<Option<PersistedGameState>, AppError> {
+        self.store.get_game(game_id).await
+    }
+
+    pub async fn save_game(&self, state: &PersistedGameState) -> Result<(), AppError> {
+        self.store.save_game(state).await
+    }
+
+    pub async fn delete_game(&self, game_id: &str) -> Result<(), AppError> {
+        self.store.delete_game(game_id).await
+    }
+
+    pub fn game_lock(&self, game_id: &str) -> Arc<tokio::sync::Mutex<()>> {
+        self.store.game_lock(game_id)
     }
 }
