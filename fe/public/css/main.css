@@ -1,0 +1,798 @@
+:root {
+    --c-color: #754E1A; /* Bright mint green */
+    --n-color: #F8E1B7; /* Dark green text */
+    --d-color: #CBA35C;
+    --m-color: #007B43
+}
+body {
+    font-family: sans-serif;
+    text-align: center;
+    margin: 0;
+}
+
+button {
+    cursor: pointer;
+    display: block;
+    background-color: var(--c-color); /* Bright mint green */
+    color: var(--n-color); /* Dark green text */
+    border: 2px solid var(--d-color);
+    padding: 10px 20px;
+    border-radius: 5px;
+    font-weight: bold;
+    transition: all 0.3s ease;
+}
+
+button:hover {
+    background-color: white;
+    color: var(--c-color);
+    border-color: white;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+}
+
+.pre-game {
+    margin: auto;
+    border: 5px solid black;
+    width: 80%;
+    height: 80%;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%,-50%);
+}
+
+.pre-game .options {
+    width: 20%;
+    height: 10rem;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%,-50%);
+    display: table-cell;
+    vertical-align: middle;
+}
+
+.pre-game .options button {
+    cursor: pointer;
+    margin: 1rem auto;
+    display: block;
+    width: 10rem;
+    height: 4rem;
+    background-color: var(--c-color); /* Bright mint green */
+    color: var(--n-color); /* Dark green text */
+    border: 2px solid var(--d-color);
+    padding: 10px 20px;
+    border-radius: 5px;
+    font-weight: bold;
+    transition: all 0.3s ease;
+}
+
+.pre-game .options button:hover {
+    background-color: white;
+    color: var(--c-color);
+    border-color: white;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+}
+
+.pre-game .waiting-game {
+    width: 40%;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%,-50%);
+    display: flex;
+    justify-content: center;
+    gap: 1rem;
+}
+
+@media (max-width: 768px) {
+    .pre-game .waiting-game {
+        width: 80%;
+    }
+}
+
+.pre-game .waiting-game .box {
+    width: 100%;
+}
+.pre-game .waiting-game .wg-players{
+    height: 9rem;
+    width: 100%;
+    border: 1px solid var(--d-color);
+    font-weight: lighter;
+    font-size: 1.2rem;
+    margin-bottom: 1rem;
+}
+
+.pre-game .waiting-game .game-id-container {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 1rem;
+    margin-bottom: 2.4rem;
+    margin-left: 1rem;
+}
+
+.pre-game .waiting-game .game-id-container .game-id{
+    font-size: 1.2rem;
+    font-weight: bold;
+}
+.pre-game .waiting-game .copy-id {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    background-color: transparent;
+    color: white;
+    border: none;
+    cursor: pointer;
+}
+
+
+.pre-game .waiting-game .copy-id:hover {
+    background-color: transparent;
+    box-shadow: none;
+}
+
+.wg-player{
+    padding-top: 0.5rem;
+    padding-bottom: 0.5rem;
+    cursor: pointer;
+}
+
+.wg-player:nth-child(even) {
+    background-color: lightblue;
+}
+
+.wg-player:nth-child(odd) {
+    background-color: lightgreen;
+}
+
+.pre-game .waiting-game  button {
+    width: 100%;
+    margin: 0.5rem auto;
+    cursor: pointer;
+    display: block;
+    height: 3rem;
+}
+
+
+.pre-game .game-form {
+    width: 20%;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%,-50%);
+    display: table-cell;
+}
+
+@media (max-width: 768px) {
+    .pre-game .game-form {
+        width: 50%;
+    }
+}
+
+.pre-game .game-form input{
+    margin-top: 0.5rem;
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 16px;
+    transition: border-color 0.3s ease, box-shadow 0.3s ease;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.pre-game .game-form input:focus{
+    border-color: #007bff;
+    box-shadow: 0 0 4px rgba(0, 123, 255, 0.4);
+    outline: none;
+}
+
+.pre-game .game-form button {
+    margin: 1rem auto;
+    display: inline-block;
+    width: 100%;
+}
+
+
+.game-container {
+    position: relative;
+    overflow: hidden;
+    width: 100%;
+    height: 100vh;
+//margin: 5vh auto;
+    background-color: var(--m-color);
+//background-color: lightblue;
+//border-radius: 16px;
+    padding: 0;
+}
+
+.deck {
+    position: absolute;
+    list-style: none;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 75px;
+    height: 105px;
+    cursor: pointer;
+}
+
+.card {
+    overflow: hidden;
+    width: 75px;
+    height: 105px;
+    border-radius: 1px;
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+}
+
+.current-player .card:hover {
+    transform: scale(1.5);
+    z-index: 15;
+    box-shadow: 0 8px 12px rgba(0, 0, 0, 0.5);
+}
+
+.deck .card {
+    display: block;
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 3;
+    opacity: 1;
+}
+
+.card-back {
+    background-image: url('/public/images/rummy/back.jpg');
+}
+
+.heart-ace {
+    background-image: url('/public/images/rummy/ace_hearts.jpg');
+}
+
+.heart-two {
+    background-image: url('/public/images/rummy/two_hearts.jpg');
+}
+
+.heart-three {
+    background-image: url('/public/images/rummy/three_hearts.jpg');
+}
+
+.heart-four {
+    background-image: url('/public/images/rummy/four_hearts.jpg');
+}
+
+.heart-five {
+    background-image: url('/public/images/rummy/five_hearts.jpg');
+}
+
+.heart-six {
+    background-image: url('/public/images/rummy/six_hearts.jpg');
+}
+
+.heart-seven {
+    background-image: url('/public/images/rummy/seven_hearts.jpg');
+}
+
+.heart-eight {
+    background-image: url('/public/images/rummy/eight_hearts.jpg');
+}
+
+.heart-nine {
+    background-image: url('/public/images/rummy/nine_hearts.jpg');
+}
+
+.heart-ten {
+    background-image: url('/public/images/rummy/ten_hearts.jpg');
+}
+
+.heart-jack {
+    background-image: url('/public/images/rummy/jack_hearts.jpg');
+}
+
+.heart-queen {
+    background-image: url('/public/images/rummy/queen_hearts.jpg');
+}
+
+.heart-king {
+    background-image: url('/public/images/rummy/king_hearts.jpg');
+}
+
+.diamond-ace {
+    background-image: url('/public/images/rummy/ace_diamonds.jpg');
+}
+
+.diamond-two {
+    background-image: url('/public/images/rummy/two_diamonds.jpg');
+}
+
+.diamond-three {
+    background-image: url('/public/images/rummy/three_diamonds.jpg');
+}
+
+.diamond-four {
+    background-image: url('/public/images/rummy/four_diamonds.jpg');
+}
+
+.diamond-five {
+    background-image: url('/public/images/rummy/five_diamonds.jpg');
+}
+
+.diamond-six {
+    background-image: url('/public/images/rummy/six_diamonds.jpg');
+}
+
+.diamond-seven {
+    background-image: url('/public/images/rummy/seven_diamonds.jpg');
+}
+
+.diamond-eight {
+    background-image: url('/public/images/rummy/eight_diamonds.jpg');
+}
+
+.diamond-nine {
+    background-image: url('/public/images/rummy/nine_diamonds.jpg');
+}
+
+.diamond-ten {
+    background-image: url('/public/images/rummy/ten_diamonds.jpg');
+}
+
+.diamond-jack {
+    background-image: url('/public/images/rummy/jack_diamonds.jpg');
+}
+
+.diamond-queen {
+    background-image: url('/public/images/rummy/queen_diamonds.jpg');
+}
+
+.diamond-king {
+    background-image: url('/public/images/rummy/king_diamonds.jpg');
+}
+
+.spade-ace {
+    background-image: url('/public/images/rummy/ace_spades.jpg');
+}
+
+.spade-two {
+    background-image: url('/public/images/rummy/two_spades.jpg');
+}
+
+.spade-three {
+    background-image: url('/public/images/rummy/three_spades.jpg');
+}
+
+.spade-four {
+    background-image: url('/public/images/rummy/four_spades.jpg');
+}
+
+.spade-five {
+    background-image: url('/public/images/rummy/five_spades.jpg');
+}
+
+.spade-six {
+    background-image: url('/public/images/rummy/six_spades.jpg');
+}
+
+.spade-seven {
+    background-image: url('/public/images/rummy/seven_spades.jpg');
+}
+
+.spade-eight {
+    background-image: url('/public/images/rummy/eight_spades.jpg');
+}
+
+.spade-nine {
+    background-image: url('/public/images/rummy/nine_spades.jpg');
+}
+
+.spade-ten {
+    background-image: url('/public/images/rummy/ten_spades.jpg');
+}
+
+.spade-jack {
+    background-image: url('/public/images/rummy/jack_spades.jpg');
+}
+
+.spade-queen {
+    background-image: url('/public/images/rummy/queen_spades.jpg');
+}
+
+.spade-king {
+    background-image: url('/public/images/rummy/king_spades.jpg');
+}
+
+.club-ace {
+    background-image: url('/public/images/rummy/ace_clubs.jpg');
+}
+
+.club-two {
+    background-image: url('/public/images/rummy/two_clubs.jpg');
+}
+
+.club-three {
+    background-image: url('/public/images/rummy/three_clubs.jpg');
+}
+
+.club-four {
+    background-image: url('/public/images/rummy/four_clubs.jpg');
+}
+
+.club-five {
+    background-image: url('/public/images/rummy/five_clubs.jpg');
+}
+
+.club-six {
+    background-image: url('/public/images/rummy/six_clubs.jpg');
+}
+
+.club-seven {
+    background-image: url('/public/images/rummy/seven_clubs.jpg');
+}
+
+.club-eight {
+    background-image: url('/public/images/rummy/eight_clubs.jpg');
+}
+
+.club-nine {
+    background-image: url('/public/images/rummy/nine_clubs.jpg');
+}
+
+.club-ten {
+    background-image: url('/public/images/rummy/ten_clubs.jpg');
+}
+
+.club-jack {
+    background-image: url('/public/images/rummy/jack_clubs.jpg');
+}
+
+.club-queen {
+    background-image: url('/public/images/rummy/queen_clubs.jpg');
+}
+
+.club-king {
+    background-image: url('/public/images/rummy/king_clubs.jpg');
+}
+
+
+.player-area {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 10px;
+}
+
+.left-enemy {
+    position: absolute;
+    left: 0;
+    top: 40%;
+    transform:  rotate(90deg) translate(0, 50%);
+//transform: translate(0, 50%);
+}
+
+.right-enemy {
+    position: absolute;
+    right: 0;
+    top: 40%;
+    transform:  rotate(-90deg) translate(0, 50%);
+}
+
+.top-enemy {
+    position: absolute;
+    left: 50%;
+    top: 2%;
+    transform: rotate(180deg) translate(50%, 0);
+}
+
+.player-name {
+    margin: 5px 0 0;
+}
+
+.top-enemy .player-name {
+    rotate: 180deg;
+}
+
+.current-player {
+    position: absolute;
+    left: 50%;
+    transform: translate(-50%, 0);
+    bottom: 2%;
+}
+
+@media (max-width: 768px) {
+    .top-enemy {
+        top: -5%;
+    }
+
+    .right-enemy {
+        right: -25%;
+    }
+    .left-enemy {
+        left: -25%;
+    }
+
+    .current-player {
+        bottom: -5%;
+    }
+}
+
+.loader {
+    display: inline-block;
+    margin-left: 5px;
+    width: 10px;
+    height: 10px;
+    border: 1px solid #ccc;  /* Light grey border */
+    border-top: 1px solid #3498db; /* Blue top border */
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    from {
+        transform: rotate(0deg);
+    }
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.starting-card {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    z-index: 10;
+    transform: translate(-66%, -59%);
+}
+
+@keyframes throw-card-bottom {
+    0% {
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+    }
+
+    100% {
+        top: 80%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+    }
+}
+
+
+@keyframes throw-card-top {
+    0% {
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+    }
+
+    100% {
+        top: 20%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+    }
+}
+
+@keyframes throw-card-left {
+    0% {
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+    }
+
+    100% {
+        top: 50%;
+        left: 20%;
+        transform: translate(-50%, -50%);
+    }
+}
+
+@keyframes throw-card-right {
+    0% {
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+    }
+
+    100% {
+        top: 50%;
+        left: 80%;
+        transform: translate(-50%, -50%);
+    }
+}
+
+.discard-pile {
+    position: absolute;
+    width: 120px;
+    height: 120px;
+    top: -80%;
+    left: 45%;
+    cursor: pointer;
+}
+
+.current-player .discard-pile {
+    left: 10%
+}
+
+.discard-pile:hover .discard-card {
+    border: 1px solid #A1E3F9;
+}
+
+.game-info {
+    position: absolute;
+    top: -80%;
+    left: 35%;
+    width: 200px;
+    height: 80px;
+    border: 1px solid var(--d-color);
+    background-color: var(--c-color);
+    color: var(--n-color);
+    display: flex;
+    align-items: center; /* Vertically center */
+    justify-content: center;
+}
+
+.game-info p {
+    margin: 0;
+    font-size: 0.8rem;
+}
+
+.discard-card {
+    position: absolute;
+    width: 60px;
+    height: 90px;
+    border-radius: 2px;
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+}
+
+.top-enemy .discard-card:nth-child(1) { transform: rotate(185deg); }
+.top-enemy .discard-card:nth-child(2) { transform: rotate(172deg) translateX(5px); }
+.top-enemy .discard-card:nth-child(3) { transform: rotate(192deg) translateX(-8px); }
+.top-enemy .discard-card:nth-child(4) { transform: rotate(200deg) translateX(-12px); }
+.top-enemy .discard-card:nth-child(5) { transform: rotate(203deg) translateX(-13px); }
+
+.left-enemy .discard-card:nth-child(1) { transform: rotate(185deg); }
+.left-enemy .discard-card:nth-child(2) { transform: rotate(12deg) translateX(5px); }
+.left-enemy .discard-card:nth-child(3) { transform: rotate(222deg) translateX(-8px); }
+.left-enemy .discard-card:nth-child(4) { transform: rotate(150deg) translateX(-12px); }
+.left-enemy .discard-card:nth-child(5) { transform: rotate(203deg) translateX(10px); }
+
+.right-enemy .discard-card:nth-child(1) { transform: rotate(100deg); }
+.right-enemy .discard-card:nth-child(2) { transform: rotate(130deg) translateX(5px); }
+.right-enemy .discard-card:nth-child(3) { transform: rotate(192deg) translateX(-8px); }
+.right-enemy .discard-card:nth-child(4) { transform: rotate(200deg) translateX(-12px); }
+.right-enemy .discard-card:nth-child(5) { transform: rotate(203deg) translateX(-13px); }
+
+.current-player .discard-card:nth-child(1) { transform: rotate(177deg); }
+.current-player .discard-card:nth-child(2) { transform: rotate(190deg) translateX(5px); }
+.current-player-enemy .discard-card:nth-child(3) { transform: rotate(145deg) translateX(-8px); }
+.current-player .discard-card:nth-child(4) { transform: rotate(220deg) translateX(10px); }
+.current-player .discard-card:nth-child(5) { transform: rotate(203deg) translateX(-13px); }
+
+
+.overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 15;
+}
+
+.card-popup-container {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: var(--d-color);
+    border: 7px solid var(--c-color);
+    padding: 20px;
+    border-radius: 8px;
+    width: 90%;
+    max-width: 800px;
+    height: 150px;
+    z-index: 30;
+}
+
+.card-popup-close-button {
+    padding: 0;
+    position: absolute;
+    display: block;
+    top: -12px;
+    right: -12px;
+    background: red;
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 24px;
+    height: 24px;
+    cursor: pointer;
+}
+
+.card-list-container {
+    display: flex;
+    overflow-x: auto;
+    gap: 20px;
+    padding: 20px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--c-color) var(--n-color);
+}
+
+.card-list-container .card:hover {
+    transform: scale(1.2);
+    box-shadow: 0 8px 12px rgba(0, 0, 0, 0.5);
+    z-index: 102;
+}
+.card-list-container::-webkit-scrollbar {
+    height: 8px;
+}
+
+.card-list-container::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 4px;
+}
+
+.card-list-container::-webkit-scrollbar-thumb {
+    background: #888;
+    border-radius: 4px;
+}
+
+
+.post-game {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: var(--d-color);
+    border: 7px solid var(--c-color);
+    padding: 20px;
+    border-radius: 8px;
+    width: 90%;
+    max-width: 800px;
+    height: 80%;
+    z-index: 30;
+    text-align: center;
+    color: var(--c-color) var(--n-color);
+}
+
+.post-game .card {
+    width: 30px;
+    height: 45px;
+}
+
+.post-game table {
+    margin: 20px auto;
+    width: 70%;
+    border-spacing: 0 10px;
+    min-height: 200px;
+}
+
+.post-game .cards {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin: auto;
+    align-items: center;
+    justify-content: center;
+}
+
+.post-game .winner-name {
+    text-align: left;
+}
+
+.post-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 60%;
+    margin: auto;
+}
+
+.post-footer button {
+    height: fit-content;
+    width: 150px;
+}
