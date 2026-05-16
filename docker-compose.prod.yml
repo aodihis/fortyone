@@ -1,0 +1,45 @@
+# VPS deployment — images pulled from GHCR, routed by existing Traefik instance.
+# Place this file at /opt/apps/fortyone/docker-compose.prod.yml on your VPS.
+# Copy .env.example to .env and fill in the values before running.
+#
+# Both services share the same domain. Traefik routes by path:
+#   - /create, /{id}/join, /{id}/ws  → backend (more specific rule = higher priority)
+#   - everything else                 → frontend (catch-all)
+
+networks:
+  traefik:
+    external: true  # the Docker network your Traefik instance is attached to
+
+services:
+  be:
+    image: ghcr.io/aodihis/fortyone-be:latest
+    networks:
+      - traefik
+    environment:
+      SERVER_ADDRESS: "0.0.0.0:3000"
+      ALLOWED_ORIGIN: "${ALLOWED_ORIGIN}"
+      JWT_SECRET: "${JWT_SECRET}"
+      LOG_LEVEL: "${LOG_LEVEL:-info}"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik"
+      # Match only the three API paths — longer rule = higher priority than fe catch-all
+      - "traefik.http.routers.fortyone-be.rule=Host(`${HOST}`) && PathRegexp(`^/(create|[a-zA-Z0-9]+/(join|ws))$`)"
+      - "traefik.http.routers.fortyone-be.entrypoints=websecure"
+      - "traefik.http.routers.fortyone-be.tls.certresolver=le"
+      - "traefik.http.services.fortyone-be.loadbalancer.server.port=3000"
+    restart: unless-stopped
+
+  fe:
+    image: ghcr.io/aodihis/fortyone-fe:latest
+    networks:
+      - traefik
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik"
+      # Catch-all — serves everything the backend didn't match
+      - "traefik.http.routers.fortyone-fe.rule=Host(`${HOST}`)"
+      - "traefik.http.routers.fortyone-fe.entrypoints=websecure"
+      - "traefik.http.routers.fortyone-fe.tls.certresolver=le"
+      - "traefik.http.services.fortyone-fe.loadbalancer.server.port=80"
+    restart: unless-stopped

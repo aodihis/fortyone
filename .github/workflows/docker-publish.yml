@@ -1,0 +1,38 @@
+name: Publish Docker Images
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & push backend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./be
+          push: true
+          tags: ghcr.io/aodihis/fortyone-be:latest
+
+      - name: Build & push frontend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./fe
+          push: true
+          tags: ghcr.io/aodihis/fortyone-fe:latest
+          build-args: |
+            API_URL=${{ secrets.API_URL }}

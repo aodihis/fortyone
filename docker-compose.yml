@@ -1,0 +1,20 @@
+services:
+  be:
+    build: ./be
+    environment:
+      SERVER_ADDRESS: "0.0.0.0:3000"
+      ALLOWED_ORIGIN: "${ALLOWED_ORIGIN:-*}"
+      JWT_SECRET: "${JWT_SECRET:-dev_secret}"
+      LOG_LEVEL: "${LOG_LEVEL:-debug}"
+    ports:
+      - "3000:3000"
+
+  fe:
+    build:
+      context: ./fe
+      args:
+        API_URL: "${API_URL:-http://localhost:3000}"
+    ports:
+      - "8080:80"
+    depends_on:
+      - be
