@@ -1,21 +1,30 @@
-use dotenvy::dotenv;
 use std::env;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Config {
     pub server_address: String,
     pub allowed_origin: String,
+    pub jwt_secret: String,
 }
 
 impl Config {
-    /// Load configuration from environment variables
+    /// Reads config from environment. Call `dotenvy::dotenv().ok()` before this.
     pub fn from_env() -> Self {
-        // Load .env file into environment variables
-        dotenv().ok();
+        let server_address = env::var("SERVER_ADDRESS").unwrap_or_else(|_| {
+            tracing::warn!("SERVER_ADDRESS not set, defaulting to 127.0.0.1:3000");
+            "127.0.0.1:3000".to_string()
+        });
+        let allowed_origin =
+            env::var("ALLOWED_ORIGIN").unwrap_or_else(|_| "*".to_string());
+        let jwt_secret = env::var("JWT_SECRET").unwrap_or_else(|_| {
+            tracing::error!("JWT_SECRET is not set — server will not issue valid tokens");
+            String::new()
+        });
 
-        let server_address = env::var("SERVER_ADDRESS").expect("SERVER_ADDRESS is not set");
-        let allowed_origin = env::var("ALLOWED_ORIGIN").unwrap_or_else(|_| "*".to_string());
-
-        Self { server_address, allowed_origin }
+        Self {
+            server_address,
+            allowed_origin,
+            jwt_secret,
+        }
     }
 }

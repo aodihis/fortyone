@@ -10,15 +10,14 @@ pub enum GameStateStatus {
     InProgress,
     Finished,
 }
+
 #[derive(Clone)]
 pub struct GameState {
     pub id: String,
-    // pub num_player: u8,
     pub status: GameStateStatus,
     pub game: Option<Game>,
-    // pub date_created: DateTime<Utc>,
-    // pub last_updated: DateTime<Utc>,
-    pub players: HashMap<Uuid, (String,tokio::sync::mpsc::UnboundedSender<axum::extract::ws::Message>)>,
+    pub players:
+        HashMap<Uuid, (String, tokio::sync::mpsc::UnboundedSender<axum::extract::ws::Message>)>,
 }
 
 pub struct GameManager {
@@ -33,6 +32,9 @@ impl GameManager {
     }
 
     pub fn create_game(&mut self) -> GameState {
+        // Purge any finished games before creating a new one to bound memory usage.
+        self.games.retain(|_, gs| gs.status != GameStateStatus::Finished || !gs.players.is_empty());
+
         let game = GameState {
             id: generate_short_uuid(),
             status: GameStateStatus::Lobby,

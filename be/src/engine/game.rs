@@ -1,33 +1,36 @@
-use crate::engine::card::{Card, Rank, Suit};
-use rand::rng;
+use crate::engine::card::{Card, Suit};
 use rand::seq::SliceRandom;
+use rand::thread_rng;
 use serde::{Deserialize, Serialize};
-use std::cmp::{max, PartialEq};
+use std::cmp::max;
 use uuid::Uuid;
 
-pub const MAX_PLAYER : usize = 4;
-pub const MINIMUM_CLOSE_SCORE : i16 = 38;
+pub const MAX_PLAYER: usize = 4;
+pub const MINIMUM_CLOSE_SCORE: i16 = 38;
+
 #[derive(Debug)]
-pub enum GameError {
-    #[allow(dead_code)]
+pub enum EngineError {
     InvalidPlayer,
     InvalidTurn,
     InvalidMove,
     CardNotFound,
+    InsufficientDeck,
 }
 
 #[allow(dead_code)]
 #[derive(PartialEq)]
 pub enum GameStatus {
     InProgress,
-    Ended
+    Ended,
 }
+
 #[allow(dead_code)]
 pub struct EndPhaseResponse {
     pub status: Option<GameStatus>,
     pub next_turn: u8,
-    pub winner: Option<Player>
+    pub winner: Option<Player>,
 }
+
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "snake_case")]
 pub enum GamePhase {
@@ -35,8 +38,6 @@ pub enum GamePhase {
     P1,
     P2,
 }
-
-
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct Game {
@@ -48,70 +49,75 @@ pub struct Game {
 }
 
 impl Game {
-    pub fn new( players_uuid: Vec<Uuid>) -> Game {
-
+    pub fn new(players_uuid: Vec<Uuid>) -> Result<Game, EngineError> {
         let mut deck = Self::create_deck();
-        let players: Vec<Player> = players_uuid.iter().map(|&uuid| {
+        let mut players: Vec<Player> = Vec::with_capacity(players_uuid.len());
+        for &uuid in &players_uuid {
             let mut hand = vec![];
             for _ in 0..4 {
-                if let Some(card) = deck.pop() {
-                    hand.push(card);
-                } else {
-                    panic!("Invalid configuration!");
+                match deck.pop() {
+                    Some(card) => hand.push(card),
+                    None => return Err(EngineError::InsufficientDeck),
                 }
             }
-            Player {
+            players.push(Player {
                 id: uuid,
                 hand,
                 bin: vec![],
-            }
-        }).collect();
-
-        Game {
+            });
+        }
+        Ok(Game {
             id: Uuid::new_v4(),
             players,
             deck,
             current_turn: 0,
             phase: GamePhase::P1,
-        }
+        })
     }
 
-    pub fn close(&mut self, player_uuid: &Uuid, card: Card) -> Result<EndPhaseResponse, GameError> {
+    pub fn close(
+        &mut self,
+        player_uuid: &Uuid,
+        card: Card,
+    ) -> Result<EndPhaseResponse, EngineError> {
         if self.players[self.current_turn].id != *player_uuid || self.phase != GamePhase::P2 {
-            return Err(GameError::InvalidMove);
+            return Err(EngineError::InvalidMove);
         }
 
-        if let Err(GameError::CardNotFound) = self.remove_card(&card) {
-            return Err(GameError::CardNotFound);
+        if let Err(EngineError::CardNotFound) = self.remove_card(&card) {
+            return Err(EngineError::CardNotFound);
         }
 
         if self.players[self.current_turn].score() < MINIMUM_CLOSE_SCORE {
             self.players[self.current_turn].hand.push(card);
-            return Err(GameError::InvalidMove);
+            return Err(EngineError::InvalidMove);
         }
 
         self.current_turn = (self.current_turn + 1) % self.players.len();
-
         self.phase = GamePhase::GameEnded;
         Ok(EndPhaseResponse {
             next_turn: self.current_turn as u8,
             status: Some(GameStatus::Ended),
-            winner: self.winner()       ,
+            winner: self.winner(),
         })
     }
 
-    pub fn discard(&mut self, player_uuid: &Uuid, card: Card) -> Result<EndPhaseResponse, GameError> {
+    pub fn discard(
+        &mut self,
+        player_uuid: &Uuid,
+        card: Card,
+    ) -> Result<EndPhaseResponse, EngineError> {
         if self.players[self.current_turn].id != *player_uuid || self.phase != GamePhase::P2 {
-            return Err(GameError::InvalidMove);
+            return Err(EngineError::InvalidMove);
         }
 
-        if let Err(GameError::CardNotFound) = self.remove_card(&card) {
-            return Err(GameError::CardNotFound);
+        if let Err(EngineError::CardNotFound) = self.remove_card(&card) {
+            return Err(EngineError::CardNotFound);
         }
 
         self.current_turn = (self.current_turn + 1) % self.players.len();
 
-        if self.deck.len() > 0 {
+        if !self.deck.is_empty() {
             self.phase = GamePhase::P1;
             self.players[self.current_turn].bin.push(card);
             Ok(EndPhaseResponse {
@@ -128,15 +134,15 @@ impl Game {
             })
         }
     }
-    pub fn take_bin(&mut self, player_uuid: &Uuid) -> Result<(), GameError> {
-        // println!("Taking bin: {:?}", self.deck);
+
+    pub fn take_bin(&mut self, player_uuid: &Uuid) -> Result<(), EngineError> {
         if self.players[self.current_turn].id != *player_uuid || self.phase != GamePhase::P1 {
-            return Err(GameError::InvalidMove);
+            return Err(EngineError::InvalidMove);
         }
 
         let card = match self.players[self.current_turn].bin.pop() {
             Some(card) => card,
-            None => return Err(GameError::InvalidMove),
+            None => return Err(EngineError::InvalidMove),
         };
 
         self.players[self.current_turn].hand.push(card);
@@ -144,14 +150,14 @@ impl Game {
         Ok(())
     }
 
-    pub fn draw(&mut self, player_uuid: &Uuid) -> Result<(), GameError>  {
-        if self.players[self.current_turn].id != *player_uuid || self.phase != GamePhase::P1  {
-            return Err(GameError::InvalidMove);
+    pub fn draw(&mut self, player_uuid: &Uuid) -> Result<(), EngineError> {
+        if self.players[self.current_turn].id != *player_uuid || self.phase != GamePhase::P1 {
+            return Err(EngineError::InvalidMove);
         }
 
         let card = match self.deck.pop() {
             Some(card) => card,
-            None => return Err(GameError::InvalidMove),
+            None => return Err(EngineError::InvalidMove),
         };
 
         if let Some(current_player) = self.players.get_mut(self.current_turn) {
@@ -160,35 +166,37 @@ impl Game {
             Ok(())
         } else {
             self.deck.push(card);
-            Err(GameError::InvalidTurn)
+            Err(EngineError::InvalidTurn)
         }
     }
 
-    pub fn remove_player(&mut self, player_uuid: &Uuid) -> Result<(), GameError> {
+    pub fn remove_player(&mut self, player_uuid: &Uuid) -> Result<(), EngineError> {
         if let Some(index) = self.players.iter().position(|c| c.id == *player_uuid) {
-            if self.current_turn == index {
-                self.phase = GamePhase::P2;
-                self.discard(player_uuid, self.players[index].hand[0].clone())?;
+            if self.current_turn == index && self.phase == GamePhase::P2 {
+                if let Some(card) = self.players[index].hand.first().cloned() {
+                    let _ = self.discard(player_uuid, card);
+                }
             }
             self.players.remove(index);
+            if self.current_turn >= self.players.len() && !self.players.is_empty() {
+                self.current_turn = 0;
+            }
         }
-
         Ok(())
     }
 
     #[allow(dead_code)]
     pub fn scores(&self) -> Vec<i16> {
-        self.players.iter().map(|player: &Player| {player.score()}).collect()
+        self.players.iter().map(|p| p.score()).collect()
     }
 
     #[allow(dead_code)]
-    pub fn score(&self, player_uuid: &Uuid) -> Result<i16, GameError> {
-        let index = match self.players.iter().position(|c| c.id == *player_uuid) {
-            Some(i) => i,
-            None => return Err(GameError::InvalidPlayer)
-        };
-
-        Ok(self.players[index].score())
+    pub fn score(&self, player_uuid: &Uuid) -> Result<i16, EngineError> {
+        self.players
+            .iter()
+            .find(|p| p.id == *player_uuid)
+            .map(|p| p.score())
+            .ok_or(EngineError::InvalidPlayer)
     }
 
     pub fn winner(&self) -> Option<Player> {
@@ -199,20 +207,19 @@ impl Game {
         let mut max_score = 0;
         for player in &self.players {
             let score = player.score();
-            if max_score < score {
+            if score > max_score {
                 winner = Some(player.clone());
                 max_score = score;
             } else if score == max_score {
-                winner = None
+                winner = None;
             }
         }
-
         winner
     }
 
     #[allow(dead_code)]
-    pub fn current_player(&self) -> Player {
-        self.players[self.current_turn].clone()
+    pub fn current_player(&self) -> Option<&Player> {
+        self.players.get(self.current_turn)
     }
 
     pub fn player_pos(&self, player_uuid: &Uuid) -> Option<usize> {
@@ -223,32 +230,45 @@ impl Game {
         self.deck.len() as u8
     }
 
-    fn remove_card(&mut self, card: &Card) -> Result<(), GameError> {
-        let index = match self.players[self.current_turn].hand.iter().position(|c| c == card) {
-            Some(i) => i,
-            None => return Err(GameError::CardNotFound)
-        };
-
-        self.players[self.current_turn].hand.remove(index);
-        Ok(())
+    fn remove_card(&mut self, card: &Card) -> Result<(), EngineError> {
+        let hand = &mut self.players[self.current_turn].hand;
+        match hand.iter().position(|c| c == card) {
+            Some(i) => {
+                hand.remove(i);
+                Ok(())
+            }
+            None => Err(EngineError::CardNotFound),
+        }
     }
 
     fn create_deck() -> Vec<Card> {
+        use crate::engine::card::Rank;
         let mut cards = Vec::with_capacity(52);
-
         for suit in [Suit::Hearts, Suit::Diamonds, Suit::Clubs, Suit::Spades].iter() {
             for rank in [
-                Rank::Ace, Rank::Two, Rank::Three, Rank::Four, Rank::Five,
-                Rank::Six, Rank::Seven, Rank::Eight, Rank::Nine, Rank::Ten,
-                Rank::Jack, Rank::Queen, Rank::King
-            ].iter() {
+                Rank::Ace,
+                Rank::Two,
+                Rank::Three,
+                Rank::Four,
+                Rank::Five,
+                Rank::Six,
+                Rank::Seven,
+                Rank::Eight,
+                Rank::Nine,
+                Rank::Ten,
+                Rank::Jack,
+                Rank::Queen,
+                Rank::King,
+            ]
+            .iter()
+            {
                 cards.push(Card {
                     suit: suit.clone(),
                     rank: rank.clone(),
-                })
+                });
             }
         }
-        cards.shuffle(&mut rng());
+        cards.shuffle(&mut thread_rng());
         cards
     }
 }
@@ -262,23 +282,18 @@ pub struct Player {
 
 impl Player {
     pub fn score(&self) -> i16 {
-
-        let mut points:[u16;4] = [0, 0, 0, 0];
-        let mut max_point:u16 = 0;
-        for i in 0..4 {
-            let card = self.hand.get(i).unwrap();
-            let point = card.points();
-            let ip = match self.hand[i].suit {
-                Suit::Hearts => {0},
-                Suit::Diamonds => {1},
-                Suit::Clubs => {2},
-                Suit::Spades => {3},
+        let mut points: [u16; 4] = [0, 0, 0, 0];
+        let mut max_point: u16 = 0;
+        for card in &self.hand {
+            let ip = match card.suit {
+                Suit::Hearts => 0,
+                Suit::Diamonds => 1,
+                Suit::Clubs => 2,
+                Suit::Spades => 3,
             };
-            points[ip] += point;
+            points[ip] += card.points();
             max_point = max(max_point, points[ip]);
         }
-        ((max_point as i16) *2) - points.iter().sum::<u16>() as i16
+        (max_point as i16) * 2 - points.iter().sum::<u16>() as i16
     }
 }
-
-
