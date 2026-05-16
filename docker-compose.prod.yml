@@ -23,11 +23,15 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=traefik"
-      # Match only the three API paths — longer rule = higher priority than fe catch-all
+      # HTTPS — match only the three API paths (longer rule = higher priority than fe catch-all)
       - "traefik.http.routers.fortyone-be.rule=Host(`${HOST}`) && PathRegexp(`^/(create|[a-zA-Z0-9]+/(join|ws))$`)"
       - "traefik.http.routers.fortyone-be.entrypoints=websecure"
-      - "traefik.http.routers.fortyone-be.tls.certresolver=le"
+      - "traefik.http.routers.fortyone-be.tls.certresolver=letsencrypt"
       - "traefik.http.services.fortyone-be.loadbalancer.server.port=3000"
+      # HTTP → HTTPS redirect
+      - "traefik.http.routers.fortyone-be-http.rule=Host(`${HOST}`) && PathRegexp(`^/(create|[a-zA-Z0-9]+/(join|ws))$`)"
+      - "traefik.http.routers.fortyone-be-http.entrypoints=web"
+      - "traefik.http.routers.fortyone-be-http.middlewares=fortyone-https"
     restart: unless-stopped
 
   fe:
@@ -37,9 +41,15 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=traefik"
-      # Catch-all — serves everything the backend didn't match
+      # HTTPS — catch-all, serves everything the backend didn't match
       - "traefik.http.routers.fortyone-fe.rule=Host(`${HOST}`)"
       - "traefik.http.routers.fortyone-fe.entrypoints=websecure"
-      - "traefik.http.routers.fortyone-fe.tls.certresolver=le"
+      - "traefik.http.routers.fortyone-fe.tls.certresolver=letsencrypt"
       - "traefik.http.services.fortyone-fe.loadbalancer.server.port=80"
+      # HTTP → HTTPS redirect
+      - "traefik.http.routers.fortyone-fe-http.rule=Host(`${HOST}`)"
+      - "traefik.http.routers.fortyone-fe-http.entrypoints=web"
+      - "traefik.http.routers.fortyone-fe-http.middlewares=fortyone-https"
+      # Shared redirect middleware (defined once, used by both routers)
+      - "traefik.http.middlewares.fortyone-https.redirectscheme.scheme=https"
     restart: unless-stopped
