@@ -53,12 +53,12 @@ jobs:
             mkdir -p /opt/apps/fortyone
 
             # Write .env from GitHub variables and secrets
-            cat > /opt/apps/fortyone/.env <<'ENVEOF'
-            HOST=${{ vars.HOST }}
-            ALLOWED_ORIGIN=${{ vars.ALLOWED_ORIGIN }}
-            LOG_LEVEL=${{ vars.LOG_LEVEL }}
-            JWT_SECRET=${{ secrets.JWT_SECRET }}
-            ENVEOF
+            printf 'HOST=%s\nALLOWED_ORIGIN=%s\nLOG_LEVEL=%s\nJWT_SECRET=%s\n' \
+              '${{ vars.HOST }}' \
+              '${{ vars.ALLOWED_ORIGIN }}' \
+              '${{ vars.LOG_LEVEL }}' \
+              '${{ secrets.JWT_SECRET }}' \
+              > /opt/apps/fortyone/.env
 
             # Pull latest images and restart
             docker compose -f /opt/apps/fortyone/docker-compose.prod.yml pull
