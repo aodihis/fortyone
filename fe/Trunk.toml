@@ -1,2 +1,3 @@
 [build]
 public_url = "/"
+wasm_opt = false
