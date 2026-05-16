@@ -54,10 +54,9 @@ fn send_action(
     spawn_local(async move {
         let payload = RequestPayload { action, card };
         let Ok(json) = serde_json::to_string(&payload) else { return };
-        let mut binding = writer.borrow_mut();
-        if let Some(w) = binding.as_mut() {
-            let _ = send_message(w, json).await;
-        }
+        let Some(mut w) = writer.borrow_mut().take() else { return };
+        let _ = send_message(&mut w, json).await;
+        *writer.borrow_mut() = Some(w);
     });
 }
 
@@ -66,14 +65,14 @@ impl Component for Game {
     type Properties = ();
 
     fn create(ctx: &Context<Self>) -> Self {
-        let create_game = ctx.link().callback(|name| Msg::CreateGame(name));
+        let create_game = ctx.link().callback(Msg::CreateGame);
         let join_game = ctx.link().callback(|(game_id, name)| Msg::JoinGame(game_id, name));
         let disconnect = ctx.link().callback(|_| Msg::Disconnect);
         let start_game = ctx.link().callback(|_| Msg::StartGame);
         let draw = ctx.link().callback(|_| Msg::Draw);
         let take_bin = ctx.link().callback(|_| Msg::TakeBin);
-        let discard = ctx.link().callback(|card| Msg::Discard(card));
-        let close = ctx.link().callback(|card| Msg::Close(card));
+        let discard = ctx.link().callback(Msg::Discard);
+        let close = ctx.link().callback(Msg::Close);
         let game_state = Rc::new(GameState::new(
             create_game, join_game, disconnect, start_game, draw, take_bin, discard, close,
         ));
@@ -146,9 +145,8 @@ impl Component for Game {
                     while let Some(msg) = reader.next().await {
                         match msg {
                             Ok(Message::Text(message)) => {
-                                match serde_json::from_str::<GameResponse>(&message) {
-                                    Ok(response) => link.send_message(Msg::GameUpdate(response)),
-                                    Err(_) => {}
+                                if let Ok(response) = serde_json::from_str::<GameResponse>(&message) {
+                                    link.send_message(Msg::GameUpdate(response));
                                 }
                             }
                             Ok(Message::Bytes(_)) => {}

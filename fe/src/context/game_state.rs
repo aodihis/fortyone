@@ -32,12 +32,6 @@ pub enum GameStatus {
     PostGame,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct EndGameScores {
-    pub name: String,
-    pub score: i16,
-    pub cards: Vec<String>,
-}
 #[derive(Clone)]
 pub struct GameState {
     // pub game_data: Rc<RefCell<GameData>>,
@@ -73,6 +67,7 @@ impl PartialEq for GameState {
 
 impl GameState {
 
+    #[allow(clippy::too_many_arguments)]
     pub fn new(create_game: Callback<String>, join: Callback<(String, String)>, disconnect: Callback<()>,
                start_game: Callback<()>, draw: Callback<()>, take_bin: Callback<()>, discard: Callback<String>, close: Callback<String>) -> GameState {
         Self {

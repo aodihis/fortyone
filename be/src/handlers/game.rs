@@ -535,7 +535,7 @@ fn send_failed_reply(game_state: &mut GameState, player_id: &Uuid) {
 
 fn broadcast_text<T: Serialize>(game_state: &mut GameState, msg: &T) {
     let Ok(text) = serde_json::to_string(msg) else { return };
-    for (_, (_, tx)) in &game_state.players {
+    for (_, tx) in game_state.players.values() {
         if let Err(e) = tx.send(Message::Text(text.clone().into())) {
             tracing::warn!("Broadcast send error: {e}");
         }

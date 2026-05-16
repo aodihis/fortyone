@@ -235,7 +235,7 @@ pub fn WaitingGame() -> Html {
         let copy_button_label = copy_button_label.clone();
         Callback::from(move |_| {
             if let Some(w) = window() {
-                let _ = w.navigator().clipboard().write_text(&*game_id);
+                let _ = w.navigator().clipboard().write_text(&game_id);
                 copy_button_label.set("✅");
                 {
                     let copy_button_label = copy_button_label.clone();

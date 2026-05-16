@@ -1,7 +1,7 @@
 
 
-pub fn card_class(string: &String) -> String {
-    match string.as_str() {
+pub fn card_class(string: &str) -> String {
+    match string {
         "HA" => String::from("heart-ace"),
         "H2" => String::from("heart-two"),
         "H3" => String::from("heart-three"),

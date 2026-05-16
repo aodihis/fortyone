@@ -24,6 +24,12 @@ pub struct GameManager {
     pub games: HashMap<String, GameState>,
 }
 
+impl Default for GameManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl GameManager {
     pub fn new() -> Self {
         Self {

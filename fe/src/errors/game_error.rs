@@ -1,6 +1,7 @@
 use std::fmt::{Display, Formatter};
 
 #[derive(Debug)]
+#[allow(clippy::enum_variant_names)]
 pub enum GameError {
     CreationFailed(String),
     JoinHttpFailed(String),

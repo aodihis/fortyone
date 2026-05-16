@@ -1,3 +1,4 @@
+use std::fmt;
 use serde::{Serialize, Deserialize};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -31,6 +32,33 @@ pub struct Card {
     pub rank: Rank,
 }
 
+impl fmt::Display for Card {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let suit = match self.suit {
+            Suit::Hearts => "H",
+            Suit::Diamonds => "D",
+            Suit::Clubs => "C",
+            Suit::Spades => "S",
+        };
+        let rank = match self.rank {
+            Rank::Ace => "A",
+            Rank::Two => "2",
+            Rank::Three => "3",
+            Rank::Four => "4",
+            Rank::Five => "5",
+            Rank::Six => "6",
+            Rank::Seven => "7",
+            Rank::Eight => "8",
+            Rank::Nine => "9",
+            Rank::Ten => "X",
+            Rank::Jack => "J",
+            Rank::Queen => "Q",
+            Rank::King => "K",
+        };
+        write!(f, "{}{}", suit, rank)
+    }
+}
+
 impl Card {
     pub fn points(&self) -> u16 {
         match self.rank {
@@ -50,32 +78,6 @@ impl Card {
         }
     }
 
-    pub fn to_string(&self) -> String {
-        let suit = match self.suit {
-            Suit::Hearts => "H",
-            Suit::Diamonds => "D",
-            Suit::Clubs => "C",
-            Suit::Spades => "S",
-        };
-
-        let rank = match self.rank {
-            Rank::Ace => "A",
-            Rank::Two => "2",
-            Rank::Three => "3",
-            Rank::Four => "4",
-            Rank::Five => "5",
-            Rank::Six => "6",
-            Rank::Seven => "7",
-            Rank::Eight => "8",
-            Rank::Nine => "9",
-            Rank::Ten => "X",
-            Rank::Jack => "J",
-            Rank::Queen => "Q",
-            Rank::King => "K",
-        };
-
-        format!("{}{}", suit, rank)
-    }
 
     pub fn from_string(input: &str) -> Option<Self> {
         if input.len() != 2 {
