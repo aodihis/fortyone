@@ -287,7 +287,7 @@ pub fn WaitingGame() -> Html {
                         </button>
                     </div>
                     {
-                        if game_state.players.len() > 1 {
+                        if game_state.is_creator && game_state.players.len() > 1 {
                             html! {<button onclick={start_onclick}>{"Start Game"}</button>}
                         } else {
                             html!{}

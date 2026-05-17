@@ -86,6 +86,7 @@ impl Component for Game {
         let state_mut = Rc::make_mut(&mut self.state_ref);
         match msg {
             Msg::CreateGame(name) => {
+                state_mut.is_creator = true;
                 let link = ctx.link().clone();
                 spawn_local(async move {
                     let game_id = match create_game().await {

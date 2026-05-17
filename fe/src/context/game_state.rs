@@ -51,6 +51,7 @@ pub struct GameState {
     pub winner: Option<String>,
     pub _event: Option<InGameEvent>,
     pub counter: usize,
+    pub is_creator: bool,
     pub alert: Option<String>,
     pub disconnected_players: Vec<DisconnectedPlayer>,
     pub game_end_reason: Option<String>,
@@ -97,6 +98,7 @@ impl GameState {
             winner: None,
             _event: None,
             counter: 0,
+            is_creator: false,
             alert: None,
             disconnected_players: vec![],
             game_end_reason: None,
@@ -122,6 +124,7 @@ impl GameState {
         self.player_name = "".to_string();
         self.players = vec![];
         self.counter = 0;
+        self.is_creator = false;
         self._event = None;
         self.alert = None;
         self.disconnected_players = vec![];
