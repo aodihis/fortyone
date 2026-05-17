@@ -54,6 +54,8 @@ struct GameRequest {
 struct GameResponse {
     status: String,
     message_type: MessageType,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    message: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -413,6 +415,7 @@ async fn handle_game_connection(
                     let err_msg = GameResponse {
                         status: "error".to_string(),
                         message_type: MessageType::Reply,
+                        message: None,
                     };
                     if let Ok(text) = serde_json::to_string(&err_msg) {
                         let _ = tx.send(Message::Text(text.into()));
@@ -604,7 +607,8 @@ async fn handle_game_data(
             return;
         }
         Err(e) => {
-            tracing::error!("Redis error in handle_game_data: {e}");
+            tracing::error!("Storage error in handle_game_data: {e}");
+            send_storage_error_reply(state, game_id, &player_id, &e);
             return;
         }
     };
@@ -624,6 +628,7 @@ async fn handle_game_data(
                     broadcast_game_message(state, game_id, &persisted, event);
                     if let Err(e) = state.save_game(&persisted).await {
                         tracing::error!("Failed to save game after start: {e}");
+                        send_storage_error_reply(state, game_id, &player_id, &e);
                     }
                 }
                 Err(e) => {
@@ -757,6 +762,7 @@ async fn handle_game_data(
     if save {
         if let Err(e) = state.save_game(&persisted).await {
             tracing::error!("Failed to save game state: {e}");
+            send_storage_error_reply(state, game_id, &player_id, &e);
         }
     }
 }
@@ -779,10 +785,11 @@ fn player_list(persisted: &PersistedGameState) -> Vec<PlayerData> {
         .collect()
 }
 
-fn send_failed_reply(state: &AppState, game_id: &str, player_id: &Uuid) {
+fn send_reply(state: &AppState, game_id: &str, player_id: &Uuid, status: &str, message: Option<String>) {
     let res = GameResponse {
-        status: "failed".to_string(),
+        status: status.to_string(),
         message_type: MessageType::Reply,
+        message,
     };
     let Ok(text) = serde_json::to_string(&res) else { return };
     if let Some(game_senders) = state.senders.get(game_id) {
@@ -793,6 +800,20 @@ fn send_failed_reply(state: &AppState, game_id: &str, player_id: &Uuid) {
             }
         }
     }
+}
+
+fn send_failed_reply(state: &AppState, game_id: &str, player_id: &Uuid) {
+    send_reply(state, game_id, player_id, "failed", None);
+}
+
+fn send_storage_error_reply(state: &AppState, game_id: &str, player_id: &Uuid, e: &crate::error::AppError) {
+    use crate::error::{classify_pool_error, classify_redis_error};
+    let msg = match e {
+        crate::error::AppError::Redis(pool_err) => classify_pool_error(pool_err).1,
+        crate::error::AppError::RedisCmd(redis_err) => classify_redis_error(redis_err).1,
+        _ => "Service temporarily unavailable — please try again",
+    };
+    send_reply(state, game_id, player_id, "error", Some(msg.to_string()));
 }
 
 fn broadcast_text<T: Serialize>(state: &AppState, game_id: &str, msg: &T) {

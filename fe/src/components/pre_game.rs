@@ -119,12 +119,6 @@ fn validate_game_id(game_id: &str) -> Result<(), &'static str> {
     Ok(())
 }
 
-fn alert(msg: &str) {
-    if let Some(w) = window() {
-        w.alert_with_message(msg).ok();
-    }
-}
-
 #[derive(Properties, PartialEq, Clone)]
 pub struct JoinGameProps {
     callback: Callback<(String, String)>,
@@ -133,41 +127,50 @@ pub struct JoinGameProps {
 #[function_component]
 pub fn JoinGame(props: &JoinGameProps) -> Html {
     let callback = props.callback.clone();
-    let onsubmit = Callback::from(move |e: SubmitEvent| {
-        e.prevent_default();
-        let target = e.target();
-        let form = target
-            .and_then(|t| t.dyn_into::<web_sys::HtmlFormElement>().ok())
-            .expect("Couldn't get HtmlFormElement");
+    let error = use_state(|| Option::<String>::None);
 
-        let name_element = form
-            .get_with_name("name")
-            .and_then(|n| n.dyn_into::<web_sys::HtmlInputElement>().ok())
-            .unwrap();
-        let game_id_element = form
-            .get_with_name("game-id")
-            .and_then(|n| n.dyn_into::<web_sys::HtmlInputElement>().ok())
-            .unwrap();
+    let onsubmit = {
+        let error = error.clone();
+        Callback::from(move |e: SubmitEvent| {
+            e.prevent_default();
+            let target = e.target();
+            let form = target
+                .and_then(|t| t.dyn_into::<web_sys::HtmlFormElement>().ok())
+                .expect("Couldn't get HtmlFormElement");
 
-        let name = match validate_name(&name_element.value()) {
-            Ok(n) => n,
-            Err(msg) => { alert(msg); return; }
-        };
+            let name_element = form
+                .get_with_name("name")
+                .and_then(|n| n.dyn_into::<web_sys::HtmlInputElement>().ok())
+                .unwrap();
+            let game_id_element = form
+                .get_with_name("game-id")
+                .and_then(|n| n.dyn_into::<web_sys::HtmlInputElement>().ok())
+                .unwrap();
 
-        let game_id = game_id_element.value();
-        if let Err(msg) = validate_game_id(&game_id) {
-            alert(msg);
-            return;
-        }
+            let name = match validate_name(&name_element.value()) {
+                Ok(n) => n,
+                Err(msg) => { error.set(Some(msg.to_string())); return; }
+            };
 
-        callback.emit((game_id, name));
-    });
+            let game_id = game_id_element.value();
+            if let Err(msg) = validate_game_id(&game_id) {
+                error.set(Some(msg.to_string()));
+                return;
+            }
+
+            error.set(None);
+            callback.emit((game_id, name));
+        })
+    };
 
     html! {
         <div class="game-form">
             <form onsubmit={onsubmit}>
-                <input name="game-id" type="text" maxlength="12" placeholder="Please, input game id"/>
-                <input name="name" type="text" maxlength="32" placeholder="Please, input your name"/>
+                <input name="game-id" type="text" maxlength="12" placeholder="Game ID"/>
+                <input name="name" type="text" maxlength="32" placeholder="Your name"/>
+                if let Some(err) = (*error).clone() {
+                    <p class="form-error">{ err }</p>
+                }
                 <button type="submit">{"Join Game"}</button>
             </form>
         </div>
@@ -184,30 +187,39 @@ pub struct CreateGameProps {
 pub fn CreateGame(props: &CreateGameProps) -> Html {
     let back_cb = props.back.clone();
     let callback = props.callback.clone();
-    let onsubmit = Callback::from(move |e: SubmitEvent| {
-        e.prevent_default();
-        let target = e.target();
-        let form = target
-            .and_then(|t| t.dyn_into::<web_sys::HtmlFormElement>().ok())
-            .expect("Couldn't get HtmlFormElement");
-        let name_element = form
-            .get_with_name("name")
-            .and_then(|n| n.dyn_into::<web_sys::HtmlInputElement>().ok())
-            .unwrap();
+    let error = use_state(|| Option::<String>::None);
 
-        let name = match validate_name(&name_element.value()) {
-            Ok(n) => n,
-            Err(msg) => { alert(msg); return; }
-        };
+    let onsubmit = {
+        let error = error.clone();
+        Callback::from(move |e: SubmitEvent| {
+            e.prevent_default();
+            let target = e.target();
+            let form = target
+                .and_then(|t| t.dyn_into::<web_sys::HtmlFormElement>().ok())
+                .expect("Couldn't get HtmlFormElement");
+            let name_element = form
+                .get_with_name("name")
+                .and_then(|n| n.dyn_into::<web_sys::HtmlInputElement>().ok())
+                .unwrap();
 
-        callback.emit(name);
-    });
+            let name = match validate_name(&name_element.value()) {
+                Ok(n) => n,
+                Err(msg) => { error.set(Some(msg.to_string())); return; }
+            };
+
+            error.set(None);
+            callback.emit(name);
+        })
+    };
     let onback = Callback::from(move |_| back_cb.emit(()));
 
     html! {
         <div class="game-form">
             <form onsubmit={onsubmit}>
-                <input name="name" type="text" maxlength="32" placeholder="Please, input your name"/>
+                <input name="name" type="text" maxlength="32" placeholder="Your name"/>
+                if let Some(err) = (*error).clone() {
+                    <p class="form-error">{ err }</p>
+                }
                 <button type="submit">{"Create Game"}</button>
             </form>
             <button onclick={onback}>{"Back"}</button>

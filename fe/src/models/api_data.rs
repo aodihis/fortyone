@@ -6,8 +6,11 @@ use serde::{Deserialize, Serialize};
 pub enum MessageType {
     PlayerJoin,
     PlayerLeft,
+    PlayerDisconnected,
+    PlayerReconnected,
     GameEvent,
     EndGame,
+    GameAbandoned,
     Reply
 }
 
@@ -29,7 +32,9 @@ pub struct GameResponse {
     pub message_type: MessageType,
     pub status: String,
     pub data: Option<GameData>,
-    pub message: Option<String>
+    pub message: Option<String>,
+    #[serde(default)]
+    pub winner_name: Option<String>,
 }
 
 
@@ -45,6 +50,8 @@ pub struct GameData {
     pub event: Option<GameEvent>,
     pub players: Vec<PlayerData>,
     pub winner_name: Option<String>,
+    #[serde(default)]
+    pub reconnect_timeout_secs: Option<u64>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Default)]
@@ -62,6 +69,7 @@ pub struct PlayerData {
 #[serde(rename_all = "snake_case")]
 enum GameEventType {
     GameStart,
+    Reconnect,
     Draw,
     TakeBin,
     Discard,

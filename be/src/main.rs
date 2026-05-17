@@ -67,17 +67,39 @@ async fn main() {
     let redis_cfg = deadpool_redis::Config::from_url(&config.redis_url);
     let redis_pool = redis_cfg
         .create_pool(Some(Runtime::Tokio1))
-        .expect("Failed to create Redis pool");
+        .unwrap_or_else(|e| {
+            tracing::error!(
+                redis_url = %config.redis_url,
+                "Failed to create Redis connection pool: {e}. \
+                 Check that REDIS_URL is a valid redis:// URI."
+            );
+            panic!("Redis pool creation failed");
+        });
 
     {
         let mut conn = redis_pool
             .get()
             .await
-            .expect("Cannot connect to Redis on startup");
+            .unwrap_or_else(|e| {
+                tracing::error!(
+                    redis_url = %config.redis_url,
+                    "Cannot connect to Redis on startup: {e}. \
+                     Verify that Redis is running and REDIS_URL is reachable."
+                );
+                panic!("Redis connection failed at startup");
+            });
         let _: String = redis::cmd("PING")
             .query_async(&mut *conn)
             .await
-            .expect("Redis PING failed — check REDIS_URL");
+            .unwrap_or_else(|e| {
+                tracing::error!(
+                    redis_url = %config.redis_url,
+                    "Redis PING failed: {e}. \
+                     The server is reachable but returned an error — check authentication \
+                     (redis://:password@host:port) and Redis server logs."
+                );
+                panic!("Redis PING failed at startup");
+            });
         tracing::info!("Redis connection verified");
     }
 

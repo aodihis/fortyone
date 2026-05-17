@@ -1,7 +1,8 @@
+use crate::components::alert::Alert;
 use crate::components::in_game::InGame;
 use crate::components::post_game::PostGame;
 use crate::components::pre_game::PreGame;
-use crate::context::game_state::{GameState, GameStatus};
+use crate::context::game_state::{DisconnectedPlayer, GameState, GameStatus};
 use crate::models::api_data::{GameRequestAction, GameResponse, MessageType, PlayerData, RequestPayload};
 use crate::models::players::Player;
 use crate::services::connection::{connect_ws, create_game, join_game_http, send_message};
@@ -12,7 +13,6 @@ use gloo_net::websocket::futures::WebSocket;
 use gloo_net::websocket::Message;
 use std::cell::RefCell;
 use std::rc::Rc;
-use web_sys::window;
 use yew::platform::spawn_local;
 use yew::{html, Component, Context, ContextProvider, Html};
 
@@ -30,6 +30,8 @@ pub enum Msg {
     Listener(SplitStream<WebSocket>),
     GameJoined(String),
     GameUpdate(GameResponse),
+    ShowAlert(String),
+    DismissAlert,
     Draw,
     TakeBin,
     Discard(String),
@@ -40,11 +42,6 @@ fn log_err(msg: &str) {
     web_sys::console::error_1(&msg.into());
 }
 
-fn alert_err(msg: &str) {
-    if let Some(w) = window() {
-        w.alert_with_message(msg).ok();
-    }
-}
 
 fn send_action(
     writer: Rc<RefCell<Option<SplitSink<WebSocket, Message>>>>,
@@ -68,13 +65,14 @@ impl Component for Game {
         let create_game = ctx.link().callback(Msg::CreateGame);
         let join_game = ctx.link().callback(|(game_id, name)| Msg::JoinGame(game_id, name));
         let disconnect = ctx.link().callback(|_| Msg::Disconnect);
+        let dismiss_alert = ctx.link().callback(|_| Msg::DismissAlert);
         let start_game = ctx.link().callback(|_| Msg::StartGame);
         let draw = ctx.link().callback(|_| Msg::Draw);
         let take_bin = ctx.link().callback(|_| Msg::TakeBin);
         let discard = ctx.link().callback(Msg::Discard);
         let close = ctx.link().callback(Msg::Close);
         let game_state = Rc::new(GameState::new(
-            create_game, join_game, disconnect, start_game, draw, take_bin, discard, close,
+            create_game, join_game, disconnect, dismiss_alert, start_game, draw, take_bin, discard, close,
         ));
 
         Self {
@@ -94,7 +92,7 @@ impl Component for Game {
                         Ok(game_id) => game_id,
                         Err(e) => {
                             log_err(&format!("create_game failed: {e}"));
-                            alert_err(&format!("Failed to create game: {e}"));
+                            link.send_message(Msg::ShowAlert(format!("Failed to create game: {e}")));
                             return;
                         }
                     };
@@ -110,7 +108,7 @@ impl Component for Game {
                         Ok(r) => r,
                         Err(e) => {
                             log_err(&format!("join_game_http failed: {e}"));
-                            alert_err(&format!("Failed to join game: {e}"));
+                            link.send_message(Msg::ShowAlert(format!("Failed to join game: {e}")));
                             return;
                         }
                     };
@@ -119,7 +117,7 @@ impl Component for Game {
                         Ok(s) => s,
                         Err(e) => {
                             log_err(&format!("connect_ws failed: {e}"));
-                            alert_err(&format!("Failed to open WebSocket: {e}"));
+                            link.send_message(Msg::ShowAlert(format!("Failed to connect: {e}")));
                             return;
                         }
                     };
@@ -179,6 +177,43 @@ impl Component for Game {
                             }
                         }
                     }
+                    MessageType::PlayerDisconnected => {
+                        if let Some(data) = response.data {
+                            let timeout = data.reconnect_timeout_secs.unwrap_or(120);
+                            // Extract player name from message: "{name} disconnected, ..."
+                            let name = response.message
+                                .as_deref()
+                                .and_then(|s| s.split(" disconnected").next())
+                                .unwrap_or("A player")
+                                .to_string();
+                            state_mut.disconnected_players.retain(|p| p.name != name);
+                            state_mut.disconnected_players.push(DisconnectedPlayer { name, timeout_secs: timeout });
+                            // Update player list with current roster
+                            state_mut.players = data.players.iter().map(|p| Player {
+                                name: p.name.clone(),
+                                bin: p.bin.clone(),
+                                hand: p.hand.clone(),
+                                score: 0,
+                            }).collect();
+                        }
+                    }
+                    MessageType::PlayerReconnected => {
+                        if let Some(data) = response.data {
+                            // Extract player name from message: "{name} reconnected"
+                            let name = response.message
+                                .as_deref()
+                                .and_then(|s| s.strip_suffix(" reconnected"))
+                                .unwrap_or("")
+                                .to_string();
+                            state_mut.disconnected_players.retain(|p| p.name != name);
+                            state_mut.players = data.players.iter().map(|p| Player {
+                                name: p.name.clone(),
+                                bin: p.bin.clone(),
+                                hand: p.hand.clone(),
+                                score: 0,
+                            }).collect();
+                        }
+                    }
                     MessageType::GameEvent => {
                         if let Some(data) = response.data {
                             let player_index = data.player_pos.unwrap_or(0) as usize;
@@ -205,6 +240,8 @@ impl Component for Game {
                         if let Some(data) = response.data {
                             state_mut.game_status = GameStatus::PostGame;
                             state_mut.winner = data.winner_name.clone();
+                            state_mut.disconnected_players.clear();
+                            state_mut.game_end_reason = None;
                             state_mut.players = data.players.iter().map(|p: &PlayerData| Player {
                                 name: p.name.clone(),
                                 bin: vec![],
@@ -213,8 +250,30 @@ impl Component for Game {
                             }).collect();
                         }
                     }
+                    MessageType::GameAbandoned => {
+                        state_mut.game_status = GameStatus::PostGame;
+                        state_mut.winner = response.winner_name.clone();
+                        state_mut.disconnected_players.clear();
+                        state_mut.game_end_reason = response.message.clone();
+                        // Keep current players for display but clear hands/bins
+                        for p in state_mut.players.iter_mut() {
+                            p.hand.clear();
+                            p.bin.clear();
+                            p.score = 0;
+                        }
+                    }
                     _ => {}
                 }
+                state_mut.counter += 1;
+                true
+            }
+            Msg::ShowAlert(msg) => {
+                state_mut.alert = Some(msg);
+                state_mut.counter += 1;
+                true
+            }
+            Msg::DismissAlert => {
+                state_mut.alert = None;
                 state_mut.counter += 1;
                 true
             }
@@ -273,6 +332,7 @@ impl Component for Game {
                             html!{}
                         }
                     }
+                    <Alert/>
                 </ContextProvider<Rc<GameState>>>
             </div>
         }

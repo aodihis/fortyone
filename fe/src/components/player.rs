@@ -6,11 +6,14 @@ use yew::{classes, html, Callback, Component, Context, ContextHandle, Html, Prop
 
 #[derive(Clone, PartialEq, Properties)]
 pub struct CurrentPlayerProps {
-    pub on_bin_click : Callback<usize>,
+    pub on_bin_click: Callback<usize>,
 }
+
 pub enum Msg {
     StateChanged(Rc<GameState>),
+    HoverCard(Option<String>),
 }
+
 pub struct ThePlayer {
     index: usize,
     is_turn: bool,
@@ -18,10 +21,68 @@ pub struct ThePlayer {
     name: String,
     hand: Vec<String>,
     bin: Vec<String>,
-    take_bin_cb : Callback<()>,
-    discard_cb : Callback<String>,
-    close_cb : Callback<String>,
-    _listener:ContextHandle<Rc<GameState>>
+    take_bin_cb: Callback<()>,
+    discard_cb: Callback<String>,
+    close_cb: Callback<String>,
+    hovered_card: Option<String>,
+    _listener: ContextHandle<Rc<GameState>>,
+}
+
+fn card_points(card: &str) -> i32 {
+    if card.len() < 2 {
+        return 0;
+    }
+    match &card[1..] {
+        "A" => 11,
+        "2" => 2,
+        "3" => 3,
+        "4" => 4,
+        "5" => 5,
+        "6" => 6,
+        "7" => 7,
+        "8" => 8,
+        "9" => 9,
+        _ => 10, // X, J, Q, K
+    }
+}
+
+fn compute_score(hand: &[String]) -> i32 {
+    let mut suit_totals = [0i32; 4]; // H=0, D=1, S=2, C=3
+    let mut total = 0i32;
+    for card in hand {
+        if card.len() < 2 {
+            continue;
+        }
+        let suit_idx = match &card[..1] {
+            "H" => 0,
+            "D" => 1,
+            "S" => 2,
+            "C" => 3,
+            _ => continue,
+        };
+        let pts = card_points(card);
+        suit_totals[suit_idx] += pts;
+        total += pts;
+    }
+    let max_suit = suit_totals.iter().copied().max().unwrap_or(0);
+    max_suit * 2 - total
+}
+
+fn can_close_with_discard(hand: &[String], discard: &str) -> bool {
+    let mut removed = false;
+    let remaining: Vec<String> = hand
+        .iter()
+        .filter(|c| {
+            if !removed && c.as_str() == discard {
+                removed = true;
+                false
+            } else {
+                true
+            }
+        })
+        .cloned()
+        .collect();
+    compute_score(&remaining) >= 38
 }
 
 impl Component for ThePlayer {
@@ -29,7 +90,8 @@ impl Component for ThePlayer {
     type Properties = CurrentPlayerProps;
 
     fn create(ctx: &Context<Self>) -> Self {
-        let (state, _listener) = ctx.link()
+        let (state, _listener) = ctx
+            .link()
             .context::<Rc<GameState>>(ctx.link().callback(Msg::StateChanged))
             .expect("context to be set");
         let is_turn = state.current_turn_index == state.player_index;
@@ -49,6 +111,7 @@ impl Component for ThePlayer {
             take_bin_cb: state.take_bin.clone(),
             discard_cb: state.discard.clone(),
             close_cb: state.close.clone(),
+            hovered_card: None,
             _listener,
         }
     }
@@ -70,6 +133,11 @@ impl Component for ThePlayer {
                 };
                 self.hand = state.players[state.player_index].hand.clone();
                 self.bin = state.players[state.player_index].bin.clone();
+                self.hovered_card = None;
+                true
+            }
+            Msg::HoverCard(card) => {
+                self.hovered_card = card;
                 true
             }
         }
@@ -88,30 +156,18 @@ impl Component for ThePlayer {
         let discard_cb = self.discard_cb.clone();
         let close_cb = self.close_cb.clone();
 
-        let on_take_bin = Callback::from(move |event: MouseEvent| {
-            event.prevent_default();
-            if is_draw_phase {
+        let on_take_bin = {
+            let take_bin_cb = take_bin_cb.clone();
+            Callback::from(move |e: MouseEvent| {
+                e.prevent_default();
                 take_bin_cb.emit(());
-            }
-        });
+            })
+        };
 
-        let on_discard = Callback::from(move |(card, e): (String, MouseEvent)| {
-            e.prevent_default();
-            if is_discard_phase {
-                discard_cb.emit(card);
-            }
-        });
-
-        let on_close = Callback::from(move |(card, e): (String, MouseEvent)| {
-            e.prevent_default();
-            if is_discard_phase {
-                close_cb.emit(card);
-            }
-        });
-        html!{
+        html! {
             <>
                 <div class="current-player">
-                    <div class="discard-pile bottom-discard" onclick={bin_click} oncontextmenu={on_take_bin}>
+                    <div class="discard-pile bottom-discard" onclick={bin_click}>
                         {
                             last_five_bin.iter().rev().map(|x| {
                                 let card_class = card_class(x);
@@ -123,51 +179,98 @@ impl Component for ThePlayer {
                     </div>
                     {
                         if self.player_phase != PlayerPhase::GameEnded {
-                            html!{
+                            html! {
                                 <div class="game-info">
                                     {
                                         if !self.is_turn {
                                             html! { "Waiting for the other player's turn!" }
                                         } else if self.player_phase == PlayerPhase::P1 {
-                                            html! { <div><p>{ "Your turn to draw or take from the bin!" }</p><p>{"Click on deck or right click on bin"}</p></div> }
+                                            html! { <p>{ "Your turn — draw from the deck or take the bin." }</p> }
                                         } else {
-                                            html!{ <div><p>{ "Remove a card from your hand!" }</p><p>{"Left click on card to discard or right click to end"}</p></div> }
-
+                                            html! { <p>{ "Discard a card from your hand." }</p> }
                                         }
                                     }
                                 </div>
                             }
                         } else {
-                            html!{}
+                            html! {}
+                        }
+                    }
+                    {
+                        if is_draw_phase && !self.bin.is_empty() {
+                            html! {
+                                <div class="player-actions">
+                                    <button class="take-bin-btn" onclick={on_take_bin}>{"Take Bin"}</button>
+                                </div>
+                            }
+                        } else {
+                            html! {}
                         }
                     }
                     <div class="player-area">
                         {
                             self.hand.iter().map(|h| {
                                 let card_class = card_class(h);
-                                let onclick = {
-                                    let on_discard = on_discard.clone();
+                                let is_hovered = self.hovered_card.as_deref() == Some(h.as_str());
+                                let closeable = is_discard_phase && can_close_with_discard(&self.hand, h);
+
+                                let onmouseenter = {
+                                    let h = h.clone();
+                                    ctx.link().callback(move |_: MouseEvent| Msg::HoverCard(Some(h.clone())))
+                                };
+                                let onmouseleave = ctx.link().callback(|_: MouseEvent| Msg::HoverCard(None));
+
+                                let discard_onclick = {
+                                    let discard_cb = discard_cb.clone();
                                     let h = h.clone();
                                     Callback::from(move |e: MouseEvent| {
-                                        on_discard.emit((h.clone(), e));
+                                        e.stop_propagation();
+                                        if is_discard_phase {
+                                            discard_cb.emit(h.clone());
+                                        }
                                     })
                                 };
 
-                                let oncontextmenu = {
-                                    let on_close = on_close.clone();
+                                let close_onclick = {
+                                    let close_cb = close_cb.clone();
                                     let h = h.clone();
                                     Callback::from(move |e: MouseEvent| {
-                                        on_close.emit((h.clone(), e));
+                                        e.stop_propagation();
+                                        if is_discard_phase {
+                                            close_cb.emit(h.clone());
+                                        }
                                     })
                                 };
-                                html!{
-                                    <div key={h.clone()} class={classes!("card", card_class)} oncontextmenu={oncontextmenu} onclick={onclick}></div>
+
+                                html! {
+                                    <div
+                                        key={h.clone()}
+                                        class={classes!("card-wrapper", closeable.then_some("closeable"))}
+                                        onmouseenter={onmouseenter}
+                                        onmouseleave={onmouseleave}
+                                    >
+                                        <div class={classes!("card", card_class)}></div>
+                                        {
+                                            if is_discard_phase && is_hovered {
+                                                html! {
+                                                    <div class="card-actions">
+                                                        if closeable {
+                                                            <button class="card-action-btn close-btn" onclick={close_onclick}>{"Close"}</button>
+                                                        }
+                                                        <button class="card-action-btn discard-btn" onclick={discard_onclick}>{"Discard"}</button>
+                                                    </div>
+                                                }
+                                            } else {
+                                                html! {}
+                                            }
+                                        }
+                                    </div>
                                 }
                             }).collect::<Html>()
                         }
-
                     </div>
-                    <div class="player-name"><span>{self.name.clone()}</span>
+                    <div class="player-name">
+                        <span>{self.name.clone()}</span>
                     </div>
                 </div>
             </>

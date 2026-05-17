@@ -17,55 +17,74 @@ pub fn PostGame(_: &Props) -> Html {
         disconnect.emit(());
     });
 
+    let is_abandoned = game_state.game_end_reason.is_some();
+    let end_reason = game_state.game_end_reason.clone();
+
     html! {
         <div class="overlay" id="post-game-overlay">
             <div class="post-game">
-                <h2>{"Game Over"}</h2>
-                <table>
-                <colgroup>
-                    <col style="width: 30%;"/>
-                    <col style="width: 50%;"/>
-                    <col style="width: 20%;"/>
-                </colgroup>
-                    <thead>
-                        <tr><th>{"Player"}</th><th>{"Cards"}</th><th>{"Score"}</th></tr>
-                    </thead>
-                    <tbody>
-                        {
-                            game_state.players.iter().map(|player| {
-                                html!{
-                                    <tr>
-                                        <td>{player.name.clone()}</td>
-                                        <td>
-                                            <div class="cards">
-                                                {
-                                                    player.hand.iter().map(|card| {
-                                                        let class = card_class(card);
-                                                        html!{
-                                                            <div class={classes!("card", class)}></div>
-                                                        }
-                                                    }).collect::<Html>()
-                                                }
-                                            </div>
-                                        </td>
-                                        <td>{player.score}</td>
-                                    </tr>
-                                }
-                            }).collect::<Html>()
-                        }
-                    </tbody>
-                </table>
-                <div class="post-footer">
-
-                    {
-                        if let Some(winner) = winner {
-                            html!{<h3 class="winner-name">{format!{"Winner: {}", winner}}</h3>}
-                        } else {
-                            html!{<h3>{"It's a draw!"}</h3>}
-                        }
+                if is_abandoned {
+                    <h2 class="abandoned-title">{"Game Abandoned"}</h2>
+                    if let Some(reason) = end_reason {
+                        <p class="abandon-reason">{ reason }</p>
                     }
-                    <button onclick={leave}>{"Leave Game"}</button>
-                </div>
+                    <div class="post-footer">
+                        {
+                            if let Some(w) = winner {
+                                html!{<h3 class="winner-name">{format!("Winner: {}", w)}</h3>}
+                            } else {
+                                html!{<h3 class="winner-name">{"No winner"}</h3>}
+                            }
+                        }
+                        <button onclick={leave}>{"Leave"}</button>
+                    </div>
+                } else {
+                    <h2>{"Game Over"}</h2>
+                    <table>
+                    <colgroup>
+                        <col style="width: 30%;"/>
+                        <col style="width: 50%;"/>
+                        <col style="width: 20%;"/>
+                    </colgroup>
+                        <thead>
+                            <tr><th>{"Player"}</th><th>{"Cards"}</th><th>{"Score"}</th></tr>
+                        </thead>
+                        <tbody>
+                            {
+                                game_state.players.iter().map(|player| {
+                                    html!{
+                                        <tr>
+                                            <td>{player.name.clone()}</td>
+                                            <td>
+                                                <div class="cards">
+                                                    {
+                                                        player.hand.iter().map(|card| {
+                                                            let class = card_class(card);
+                                                            html!{
+                                                                <div class={classes!("card", class)}></div>
+                                                            }
+                                                        }).collect::<Html>()
+                                                    }
+                                                </div>
+                                            </td>
+                                            <td>{player.score}</td>
+                                        </tr>
+                                    }
+                                }).collect::<Html>()
+                            }
+                        </tbody>
+                    </table>
+                    <div class="post-footer">
+                        {
+                            if let Some(w) = winner {
+                                html!{<h3 class="winner-name">{format!("Winner: {}", w)}</h3>}
+                            } else {
+                                html!{<h3>{"It's a draw!"}</h3>}
+                            }
+                        }
+                        <button onclick={leave}>{"Leave Game"}</button>
+                    </div>
+                }
             </div>
         </div>
     }

@@ -1,6 +1,6 @@
 use crate::components::enemy::{Enemy, EnemyPos};
 use crate::components::player::ThePlayer;
-use crate::context::game_state::{GameState, GameStatus, PlayerPhase};
+use crate::context::game_state::{DisconnectedPlayer, GameState, GameStatus, PlayerPhase};
 use crate::utils::card_class;
 use gloo_timers::future::TimeoutFuture;
 use std::rc::Rc;
@@ -27,6 +27,7 @@ pub struct InGame{
     player_index: usize,
     current_turn_index: usize,
     draw_cb: Callback<()>,
+    disconnected_players: Vec<DisconnectedPlayer>,
     _listener: ContextHandle<Rc<GameState>>
 }
 
@@ -48,6 +49,7 @@ impl Component for InGame{
             current_turn_index: state.current_turn_index,
             card_left: state.card_left,
             draw_cb: state.draw.clone(),
+            disconnected_players: state.disconnected_players.clone(),
             _listener,
         }
     }
@@ -63,7 +65,8 @@ impl Component for InGame{
                 self.current_turn_index = state.current_turn_index;
                 self.player_phase = state.current_turn_phase.clone();
                 self.card_left = state.card_left;
-               true
+                self.disconnected_players = state.disconnected_players.clone();
+                true
             }
             Msg::PhaseChanged(phase) => {
                 self.phase = phase;
@@ -124,8 +127,22 @@ impl Component for InGame{
             })
         };
 
+        let disconnect_banner = if !self.disconnected_players.is_empty() {
+            let items = self.disconnected_players.iter().map(|p| {
+                html! {
+                    <span class="disconnect-item">
+                        { format!("⚠ {} is reconnecting… ({}s)", p.name, p.timeout_secs) }
+                    </span>
+                }
+            }).collect::<Html>();
+            html! { <div class="disconnect-banner">{ items }</div> }
+        } else {
+            html! {}
+        };
+
         html! {
             <>
+                { disconnect_banner }
                 {
                     if self.bin_index.is_some() {
                         html!{<CardBinShowCase onclose={onclose_bin} bin_index={self.bin_index.unwrap()}/>}
